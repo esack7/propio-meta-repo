@@ -59,11 +59,6 @@ for name in $NAMES; do
 
 	worktree_path=$(safe_child_path "$WORKTREES_DIR" "$name" "worktree path")
 
-	if [ ! -d "$worktree_path" ]; then
-		printf 'skip %s (no worktree)\n' "$name"
-		continue
-	fi
-
 	if [ "$OFFLINE" -eq 0 ]; then
 		if ! git -C "$ref_clone" fetch origin --prune; then
 			die "fetch failed for $name; refusing close-spec (use --offline for acknowledged offline close)"
@@ -71,6 +66,19 @@ for name in $NAMES; do
 	else
 		STALE_NOTE=1
 	fi
+
+	existing=$(worktree_registered_at "$ref_clone" "$worktree_path")
+	if [ ! -d "$worktree_path" ]; then
+		if [ "$existing" = "yes" ]; then
+			printf 'ok stale worktree metadata %s (will prune)\n' "$name"
+		else
+			printf 'skip %s (no worktree)\n' "$name"
+		fi
+		continue
+	fi
+
+	[ "$existing" = "yes" ] || \
+		die "directory exists at specs/$SPEC/repos/$name but is not a registered worktree"
 
 	require_clean_worktree "$worktree_path" "specs/$SPEC/repos/$name"
 
@@ -95,17 +103,22 @@ for name in $NAMES; do
 	ref_clone=$(safe_child_path "$ROOT/repos" "$name" "reference clone")
 	worktree_path=$(safe_child_path "$WORKTREES_DIR" "$name" "worktree path")
 
-	if [ ! -d "$worktree_path" ]; then
-		continue
-	fi
-
 	existing=$(worktree_registered_at "$ref_clone" "$worktree_path")
 
 	if [ "$existing" = "yes" ]; then
-		git -C "$ref_clone" worktree remove "$worktree_path" || \
-			die "failed to remove worktree for $name"
-		git -C "$ref_clone" worktree prune
-		printf 'ok removed worktree %s\n' "$name"
+		if [ -d "$worktree_path" ]; then
+			git -C "$ref_clone" worktree remove "$worktree_path" || \
+				die "failed to remove worktree for $name"
+			git -C "$ref_clone" worktree prune
+			printf 'ok removed worktree %s\n' "$name"
+		else
+			git -C "$ref_clone" worktree remove --force "$worktree_path" || \
+				die "failed to remove stale worktree metadata for $name"
+			if [ "$(worktree_registered_at "$ref_clone" "$worktree_path")" = "yes" ]; then
+				die "failed to remove stale worktree metadata for $name"
+			fi
+			printf 'ok removed stale worktree metadata %s\n' "$name"
+		fi
 	elif [ -d "$worktree_path" ]; then
 		ORPHANED="$ORPHANED $worktree_path"
 	fi

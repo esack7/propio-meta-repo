@@ -42,6 +42,10 @@ critical_comment '^  - name: ' 'name'
 critical_comment '^      clone_url: ' 'clone_url'
 critical_comment '^      default_branch: ' 'default_branch'
 
+# Require exactly one repositories declaration before handling either supported form.
+repositories_line_count=$(grep -cE '^repositories:' "$TMP" 2>/dev/null) || repositories_line_count=0
+[ "$repositories_line_count" -eq 1 ] || fail "duplicate or missing repositories declaration"
+
 # Empty repositories: [] only supported flow form.
 if grep -qE '^repositories:[[:space:]]*\[[[:space:]]*\][[:space:]]*$' "$TMP"; then
 	if grep -qE '^[[:space:]]+-[[:space:]]+name:' "$TMP"; then
@@ -55,9 +59,6 @@ grep -qE '^repositories:[[:space:]]*$' "$TMP" || \
 
 repos_header_count=$(grep -cE '^repositories:[[:space:]]*$' "$TMP" 2>/dev/null) || repos_header_count=0
 [ "$repos_header_count" -eq 1 ] || fail "duplicate repositories declaration"
-
-repositories_line_count=$(grep -cE '^repositories:' "$TMP" 2>/dev/null) || repositories_line_count=0
-[ "$repositories_line_count" -eq 1 ] || fail "duplicate repositories declaration"
 
 if grep -qE '^repositories:[[:space:]]*\[' "$TMP"; then
 	fail "flow-style repositories list is only supported for repositories: []"

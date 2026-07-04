@@ -80,6 +80,14 @@ for skill in setup-repositories refresh-repositories create-spec prepare-spec cl
 	else
 		fail "skill metadata: $skill"
 	fi
+	ui_file="$ROOT/.claude/skills/$skill/agents/openai.yaml"
+	if [ -f "$ui_file" ] && grep -q '^  display_name: "' "$ui_file" && \
+		grep -q '^  short_description: "' "$ui_file" && \
+		grep -Fq 'default_prompt: "Use $'"$skill" "$ui_file"; then
+		pass "skill UI metadata: $skill"
+	else
+		fail "skill UI metadata: $skill"
+	fi
 done
 
 # Codex symlinks
@@ -224,6 +232,15 @@ write_map "$WORKDIR/dup-repos-header.yaml" \
 	"  - name: repo-a" "    git:" "      clone_url: $ORIGIN_A" "      default_branch: main"
 assert_fail 'reject duplicate repositories header' "$META_EXTRACT" "$WORKDIR/dup-repos-header.yaml"
 
+write_map "$WORKDIR/dup-empty-repos.yaml" \
+	"version: 1" "repositories: []" "repositories: []"
+assert_fail 'reject duplicate empty repositories declarations' "$META_EXTRACT" "$WORKDIR/dup-empty-repos.yaml"
+
+write_map "$WORKDIR/traversal-name.yaml" \
+	"version: 1" "repositories:" \
+	"  - name: ../escape" "    git:" "      clone_url: $ORIGIN_A" "      default_branch: main"
+assert_fail 'reject traversal repository name' "$META_EXTRACT" "$WORKDIR/traversal-name.yaml"
+
 write_map "$WORKDIR/punct-desc.yaml" \
 	"version: 1" "repositories:" \
 	"  - name: repo-a" \
@@ -303,6 +320,30 @@ fi
 [ -d "$META/repos/repo-a/.git" ] && pass 'repo-a clone exists' || fail 'repo-a clone exists'
 [ -d "$META/repos/repo-b/.git" ] && pass 'repo-b clone exists' || fail 'repo-b clone exists'
 
+# Setup must never remove a pre-existing path that merely resembles its temporary path.
+COLLISION_META="$WORKDIR/setup-collision"
+mkdir -p "$COLLISION_META/.claude/skills"
+cp -R "$ROOT/.claude/skills/." "$COLLISION_META/.claude/skills/"
+COLLISION_MAP="$COLLISION_META/project-repositories.yaml"
+write_map "$COLLISION_MAP" \
+	"version: 1" "repositories:" \
+	"  - name: repo-a" "    git:" "      clone_url: $ORIGIN_A" "      default_branch: main"
+COLLISION_SETUP="$COLLISION_META/.claude/skills/setup-repositories/scripts/setup-repositories.sh"
+if sh -c '
+	root=$1
+	setup=$2
+	map=$3
+	collision="$root/repos/.setup-tmp-$$-repo-a"
+	mkdir -p "$collision"
+	printf keep > "$collision/marker"
+	exec "$setup" "$map" repo-a
+' sh "$COLLISION_META" "$COLLISION_SETUP" "$COLLISION_MAP" >/dev/null 2>&1 && \
+	find "$COLLISION_META/repos" -name marker -print -quit | grep -q .; then
+	pass 'setup preserves pre-existing temp-like directories'
+else
+	fail 'setup preserves pre-existing temp-like directories'
+fi
+
 rm -rf "$META/repos/repo-a"
 printf 'not a git repo\n' > "$META/repos/repo-a"
 assert_fail 'setup refuses conflicting non-git path' "$META_SETUP" "$MAP" repo-a
@@ -326,6 +367,40 @@ if "$META_SETUP" "$MAP" >/dev/null 2>&1 && [ "$(git -C "$META/repos/repo-a" rev-
 	pass 'setup does not modify existing clones'
 else
 	fail 'setup does not modify existing clones'
+fi
+
+saved_setup_origin=$(git -C "$META/repos/repo-a" remote get-url origin)
+git -C "$META/repos/repo-a" remote set-url origin "$WORKDIR/wrong-existing.git"
+assert_fail 'setup rejects existing clone origin mismatch' "$META_SETUP" "$MAP" repo-a
+git -C "$META/repos/repo-a" remote set-url origin "$saved_setup_origin"
+
+# Simulate a clone whose origin changes before post-clone validation.
+POST_CLONE_META="$WORKDIR/post-clone-mismatch"
+mkdir -p "$POST_CLONE_META/.claude/skills" "$WORKDIR/git-shim"
+cp -R "$ROOT/.claude/skills/." "$POST_CLONE_META/.claude/skills/"
+POST_CLONE_MAP="$POST_CLONE_META/project-repositories.yaml"
+write_map "$POST_CLONE_MAP" \
+	"version: 1" "repositories:" \
+	"  - name: repo-a" "    git:" "      clone_url: $ORIGIN_A" "      default_branch: main"
+REAL_GIT=$(command -v git)
+printf '%s\n' \
+	'#!/bin/sh' \
+	'if [ "$1" = clone ]; then' \
+	'  "$REAL_GIT" "$@" || exit $?' \
+	'  for destination; do :; done' \
+	'  "$REAL_GIT" -C "$destination" remote set-url origin "$POST_CLONE_WRONG"' \
+	'  exit 0' \
+	'fi' \
+	'exec "$REAL_GIT" "$@"' > "$WORKDIR/git-shim/git"
+chmod +x "$WORKDIR/git-shim/git"
+POST_CLONE_SETUP="$POST_CLONE_META/.claude/skills/setup-repositories/scripts/setup-repositories.sh"
+if PATH="$WORKDIR/git-shim:$PATH" REAL_GIT="$REAL_GIT" POST_CLONE_WRONG="$WORKDIR/wrong-post-clone.git" \
+	"$POST_CLONE_SETUP" "$POST_CLONE_MAP" repo-a >/dev/null 2>&1; then
+	fail 'setup rejects post-clone origin mismatch'
+elif [ ! -e "$POST_CLONE_META/repos/repo-a" ]; then
+	pass 'setup rejects post-clone origin mismatch'
+else
+	fail 'setup cleans target after post-clone origin mismatch'
 fi
 
 # Refresh up-to-date
@@ -445,6 +520,17 @@ git -C "$SPEC_DIR/repos/repo-a" rev-parse --is-inside-work-tree >/dev/null 2>&1 
 branch_a=$(git -C "$SPEC_DIR/repos/repo-a" rev-parse --abbrev-ref HEAD)
 [ "$branch_a" = "feature/$SPEC" ] && pass 'worktree branch repo-a' || fail 'worktree branch repo-a'
 
+# Worktree registration checks must preserve paths containing spaces.
+SPACE_WT="$WORKDIR/worktree with spaces"
+if git -C "$META/repos/repo-a" worktree add -b feature/space-path "$SPACE_WT" origin/main >/dev/null 2>&1 && \
+	[ "$(worktree_registered_at "$META/repos/repo-a" "$SPACE_WT")" = "yes" ]; then
+	pass 'worktree registration supports paths with spaces'
+else
+	fail 'worktree registration supports paths with spaces'
+fi
+git -C "$META/repos/repo-a" worktree remove "$SPACE_WT" >/dev/null 2>&1 || true
+git -C "$META/repos/repo-a" branch -D feature/space-path >/dev/null 2>&1 || true
+
 if "$META_PREPARE" "$MAP" "$SPEC" >/dev/null 2>&1; then
 	pass 'prepare-spec skips existing worktrees'
 else
@@ -497,6 +583,44 @@ SPEC_REMOTE_DIR="$META/specs/$SPEC_REMOTE"
 FEATURE_SHA=$(git -C "$SPEC_REMOTE_DIR/repos/repo-a" rev-parse HEAD)
 git -C "$META/repos/repo-a" push origin "feature/$SPEC_REMOTE" >/dev/null 2>&1
 "$META_CLOSE" "$MAP" "$SPEC_REMOTE" >/dev/null 2>&1
+
+# An unregistered Git directory must fail preflight before any valid worktree is removed.
+SPEC_UNREGISTERED=feature-unregistered
+"$META_CREATE" "$MAP" "$SPEC_UNREGISTERED" --summary "Unregistered path" repo-a repo-b >/dev/null 2>&1
+SPEC_UNREGISTERED_DIR="$META/specs/$SPEC_UNREGISTERED"
+"$META_PREPARE" "$MAP" "$SPEC_UNREGISTERED" >/dev/null 2>&1
+git -C "$META/repos/repo-b" worktree remove "$SPEC_UNREGISTERED_DIR/repos/repo-b" >/dev/null 2>&1
+git clone --branch main "$ORIGIN_B" "$SPEC_UNREGISTERED_DIR/repos/repo-b" >/dev/null 2>&1
+git -C "$SPEC_UNREGISTERED_DIR/repos/repo-b" checkout -b "feature/$SPEC_UNREGISTERED" >/dev/null 2>&1
+assert_fail 'close rejects unregistered Git directory during preflight' \
+	"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED"
+if [ -d "$SPEC_UNREGISTERED_DIR/repos/repo-a" ]; then
+	pass 'close retains earlier worktrees on unregistered-directory failure'
+else
+	fail 'close retains earlier worktrees on unregistered-directory failure'
+fi
+rm -rf "$SPEC_UNREGISTERED_DIR/repos/repo-b"
+git -C "$META/repos/repo-b" worktree add "$SPEC_UNREGISTERED_DIR/repos/repo-b" \
+	"feature/$SPEC_UNREGISTERED" >/dev/null 2>&1
+"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED" >/dev/null 2>&1
+
+# Missing worktree directories must have their stale registration pruned.
+SPEC_STALE=feature-stale
+"$META_CREATE" "$MAP" "$SPEC_STALE" --summary "Stale metadata" repo-a >/dev/null 2>&1
+SPEC_STALE_DIR="$META/specs/$SPEC_STALE"
+"$META_PREPARE" "$MAP" "$SPEC_STALE" >/dev/null 2>&1
+rm -rf "$SPEC_STALE_DIR/repos/repo-a"
+if [ "$(worktree_registered_at "$META/repos/repo-a" "$SPEC_STALE_DIR/repos/repo-a")" = "yes" ]; then
+	pass 'stale worktree registration fixture created'
+else
+	fail 'stale worktree registration fixture created'
+fi
+if "$META_CLOSE" "$MAP" "$SPEC_STALE" >/dev/null 2>&1 && \
+	[ "$(worktree_registered_at "$META/repos/repo-a" "$SPEC_STALE_DIR/repos/repo-a")" != "yes" ]; then
+	pass 'close prunes stale worktree registration'
+else
+	fail 'close prunes stale worktree registration'
+fi
 git -C "$META/repos/repo-a" branch -D "feature/$SPEC_REMOTE" >/dev/null 2>&1
 if "$META_PREPARE" "$MAP" "$SPEC_REMOTE" --reuse-branches >/dev/null 2>&1; then
 	reopened_sha=$(git -C "$SPEC_REMOTE_DIR/repos/repo-a" rev-parse HEAD)
@@ -560,10 +684,14 @@ assert_fail 'parse rejects unknown repo' "$PARSE" "$WORKDIR/bad-repos.txt" --val
 write_map "$WORKDIR/dup-repos.txt" "repo-a" "repo-a"
 assert_fail 'parse rejects duplicate repos' "$PARSE" "$WORKDIR/dup-repos.txt"
 
-if grep -qF '/repos/' "$ROOT/.gitignore" && grep -qF '/specs/*/repos/' "$ROOT/.gitignore"; then
-	pass 'gitignore entries'
+if grep -qF '/repos/' "$ROOT/.gitignore" && grep -qF '/specs/*/repos/' "$ROOT/.gitignore" && \
+	git -C "$ROOT" check-ignore -q --no-index repos/example && \
+	git -C "$ROOT" check-ignore -q --no-index specs/example/repos/repository && \
+	! git -C "$ROOT" check-ignore -q --no-index specs/example/requirements.md && \
+	! git -C "$ROOT" check-ignore -q --no-index specs/example/repos.txt; then
+	pass 'gitignore ignores clones and worktrees but not spec documents'
 else
-	fail 'gitignore entries'
+	fail 'gitignore ignores clones and worktrees but not spec documents'
 fi
 
 # Live validation harness availability (reported; not equivalent to passing tests above)

@@ -124,8 +124,9 @@ worktree_registered_at() {
 	path=$2
 	canonical=$(canonical_path "$path")
 	git -C "$repo_dir" worktree list --porcelain 2>/dev/null | awk -v p="$canonical" '
-		$1 == "worktree" {
-			wt = $2
+		/^worktree / {
+			wt = $0
+			sub(/^worktree /, "", wt)
 			if (wt == p) found = 1
 		}
 		END { if (found) print "yes" }

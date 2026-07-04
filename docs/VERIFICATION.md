@@ -5,13 +5,14 @@ This document records what the automated test suite verifies and what still requ
 ## Verified locally (`tests/run-tests.sh`)
 
 - Shell syntax for all bundled helpers
-- Skill `SKILL.md` frontmatter presence (`name`, `description`)
+- Skill `SKILL.md` frontmatter and `agents/openai.yaml` UI metadata presence
 - Codex symlink resolution (`.agents/skills/*` → `.claude/skills/*`)
 - Project-map constrained-layout parsing (positive and negative cases)
-- Reference-clone setup, refresh, and refusal paths
-- Spec lifecycle helpers: `create-spec`, `prepare-spec`, `close-spec`
+- Reference-clone setup, temporary-directory ownership, post-clone validation, refresh, and refusal paths
+- Spec lifecycle helpers: `create-spec`, `prepare-spec`, and atomic-preflight/stale-metadata behavior in `close-spec`
+- Worktree registration under paths containing spaces
 - `repos.txt` validation
-- `.gitignore` entries for ignored clone/worktree paths
+- `.gitignore` behavior for ignored clone/worktree paths and trackable spec documents
 
 Run:
 

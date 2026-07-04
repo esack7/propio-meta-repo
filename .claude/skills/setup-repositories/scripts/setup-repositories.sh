@@ -63,8 +63,8 @@ for name in $NAMES; do
 		die "conflicting path exists: $target"
 	fi
 
-	tmp="$REPOS_DIR/.setup-tmp-$$-$name"
-	cleanup_tmp "$tmp"
+	tmp=$(mktemp -d "$REPOS_DIR/.setup-tmp-XXXXXX") || \
+		die "unable to create temporary clone directory under $REPOS_DIR"
 	trap 'cleanup_tmp "$tmp"' EXIT INT HUP TERM
 
 	printf 'cloning %s...\n' "$name"
