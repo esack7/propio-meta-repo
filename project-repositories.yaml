@@ -1,0 +1,7 @@
+# Project map for cross-repo work. See AGENTS.md for schema guidance.
+version: 1
+
+# Starter form: add repository entries under repositories: (block list).
+# Git-critical fields (name, git.clone_url, git.default_branch) must follow the
+# constrained layout documented in AGENTS.md.
+repositories: []
