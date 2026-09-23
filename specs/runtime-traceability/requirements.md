@@ -38,7 +38,7 @@ Implement durable end-to-end runtime traceability, accurate outcomes, configurat
 - [x] Repository-required builds, tests, formatting, and pinned Fallow checks pass.
 - [x] Journal overhead is measured for token-heavy and tool-heavy fixtures and checked against a documented regression threshold.
 
-See [the acceptance review](acceptance-review.md) for evidence and limitations. All twelve criteria now have merged deterministic evidence, not live-provider certification; the detailed G3 provenance task still awaits agent PR #100.
+See [the acceptance review](acceptance-review.md) for evidence and limitations. All twelve criteria and the detailed G3 provenance task now have merged deterministic evidence, not live-provider certification.
 
 ## Affected repositories
 

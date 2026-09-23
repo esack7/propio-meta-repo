@@ -2,11 +2,11 @@
 
 Date: 2026-09-22 (Pacific)
 
-Merged baseline: `propio-agent` main `7b0e428`; `propio-providers` main `fe34bb5`
+Merged baseline: `propio-agent` main `946ede9`; `propio-providers` main `fe34bb5`
 
-Merged adapter verification: [providers PR #16](https://github.com/esack7/propio-providers/pull/16). Candidate detailed G3 provenance: [agent PR #100](https://github.com/esack7/propio-agent/pull/100).
+Merged final verification: [providers PR #16](https://github.com/esack7/propio-providers/pull/16) and [agent PR #100](https://github.com/esack7/propio-agent/pull/100).
 
-This review maps the twelve criteria in `requirements.md` to executable evidence. “Met” means the stated behavior is merged and supported by code and a deterministic test; it does not imply that every upstream SDK field or external side effect is observable. “Candidate” means the tests pass locally and in PR CI but the change is not merged. “Partial” means the literal criterion has a remaining evidence gap.
+This review maps the twelve criteria in `requirements.md` to executable evidence. “Met” means the stated behavior is merged and supported by code and a deterministic test; it does not imply that every upstream SDK field or external side effect is observable.
 
 | ID | Acceptance criterion | Status | Evidence and limit |
 | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ This review maps the twelve criteria in `requirements.md` to executable evidence
 | A8 | Interrupted run exports and inspects offline without provider/tool access | Met | Agent `src/__tests__/recovery.integration.test.ts` and `src/trace/__tests__/journal.test.ts` move away the source before inspection; `src/__tests__/fullCapture.test.ts` verifies full-bundle material and read-only response playback. |
 | A9 | Standard output/export excludes synthetic secrets and reports omissions | Met | Agent `src/trace/__tests__/journal.test.ts` checks standard redaction; `src/__tests__/agent.test.ts` checks configuration secrets; `src/__tests__/fullCapture.test.ts` checks omitted credentials and missing material. This is a tested synthetic-secret policy, not a guarantee against arbitrary secrets in ordinary text; full bundles remain private. |
 | A10 | Compatibility and no implicit reusable-library trace I/O | Met | Agent `src/__tests__/agent.test.ts` exercises disabled/degraded tracing and prior session behavior; public boundary suites cover side-effect-free imports/construction. Providers tracing is optional and observers are isolated in `src/__tests__/trace.test.ts`. |
-| A11 | Builds, tests, formatting, pinned Fallow | Met | Merged agent PR #99 and providers PRs #15–16 passed their gates. Providers PR #16 passed build, 411 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. Candidate agent PR #100 passes build, 1,634 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. |
+| A11 | Builds, tests, formatting, pinned Fallow | Met | Merged agent PRs #99–100 and providers PRs #15–16 passed their gates. Providers PR #16 passed build, 411 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. Agent PR #100 passed build, 1,634 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. |
 | A12 | Measured token/tool overhead against documented thresholds | Met | Agent `npm run benchmark:trace` passed: full token 29.7 ms / 47,426 B; tool 3,028 ms / 489,152 B; workspace 950 ms / 50,757 B, all below the README limits. These are local fixtures, not live-provider latency. |
 
 ## Nine-adapter scenario matrix
@@ -39,10 +39,9 @@ Each linked suite exercises the concrete adapter with mocked transport. “Retry
 | [xAI](https://github.com/esack7/propio-providers/blob/41dfec1993c5b1117008fbc13e3cf6e906efa294/src/__tests__/xai.test.ts) | Response identity + usage | Streamed tool call | Rate-limit and regional fallback | Cancelled/exhausted requests | Unmetered tool response | Raw `tool_calls` |
 | [Cloudflare](https://github.com/esack7/propio-providers/blob/41dfec1993c5b1117008fbc13e3cf6e906efa294/src/__tests__/cloudflare.test.ts) | Response identity + usage | Streamed tool call | 503 then success | API failure body | Unmetered retry response | Raw `stop` / `tool_calls` |
 
-## Remaining verification before closing the spec
+## Remaining closeout before closing the spec
 
-1. Review and merge agent PR #100, then mark the detailed G3 task complete. A6 is already met through merged providers PR #16.
-2. Merge this evidence PR and run `close-spec` only after its worktrees are no longer needed.
-3. Keep full-capture limits explicit: adapter payloads precede SDK serialization, hidden reasoning is unavailable, workspace capture excludes ignored/credential-shaped files, and external side effects are not reconstructed automatically.
+1. Merge this evidence PR and run `close-spec` only after its worktrees are no longer needed.
+2. Keep full-capture limits explicit: adapter payloads precede SDK serialization, hidden reasoning is unavailable, workspace capture excludes ignored/credential-shaped files, and external side effects are not reconstructed automatically.
 
 No live provider calls or paid smoke tests were made for this review.
