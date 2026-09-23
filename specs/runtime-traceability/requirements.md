@@ -25,7 +25,7 @@ Implement durable end-to-end runtime traceability, accurate outcomes, configurat
 
 ## Acceptance criteria
 
-- [ ] A two-turn fixture containing tool calls, a retry, and a summary has unambiguous causal IDs and ordered durable events.
+- [x] A two-turn fixture containing tool calls, a retry, and a summary has unambiguous causal IDs and ordered durable events.
 - [x] Resume preserves the session ID, creates a new linked run, handles truncated journals, and never duplicates recorded results.
 - [x] Shell nonzero exit, timeout, cancellation, launch failure, remote unknown outcome, and completed side effects followed by capture failure remain distinct.
 - [x] Each request and tool dispatch references the configuration, prompt, policy, and tool-scope revision actually used.
@@ -38,11 +38,11 @@ Implement durable end-to-end runtime traceability, accurate outcomes, configurat
 - [x] Repository-required builds, tests, formatting, and pinned Fallow checks pass.
 - [x] Journal overhead is measured for token-heavy and tool-heavy fixtures and checked against a documented regression threshold.
 
-See [the acceptance review](acceptance-review.md) for evidence, limitations, and the two open criteria. Checked items reflect deterministic local evidence, not live-provider certification.
+See [the acceptance review](acceptance-review.md) for evidence, limitations, and the remaining candidate A6 criterion. Checked items reflect merged deterministic evidence, not live-provider certification.
 
 ## Affected repositories
 
-<!-- Confirmed names are listed in repos.txt -->
+`propio-agent` and `propio-providers` (the confirmed names are listed in `repos.txt`).
 
 ## Open questions
 

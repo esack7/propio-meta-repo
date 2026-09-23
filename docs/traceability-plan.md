@@ -2,7 +2,7 @@
 
 Date: 2026-09-21
 
-Status: core implementation merged; final verification in progress
+Status: core implementation merged; final G3 and A6 verification in review
 
 Companion documents: [original findings](traceability-findings.md), [evidence-based reassessment](traceability-reassessment.md), and [acceptance review](../specs/runtime-traceability/acceptance-review.md)
 
@@ -179,13 +179,15 @@ For implementation changes, run the repository-required build, tests, formatting
 
 ## Completion checklist
 
-- [ ] G1: Every observed request, attempt, tool operation, and relevant context operation has causal identity and a durable record or explicit capture-failure signal.
-- [ ] G2: Completed tool results survive later interruption; command failures and uncertain side effects are accurately represented.
-- [ ] G3: Requests and calls reference the actual configuration, prompt, policy, scope, and fallback state they used.
-- [ ] G4: Timing and available usage/cost are attributed correctly; a portable bundle supports offline reconstruction within its stated capture level.
+- [x] G1: Every observed request, attempt, tool operation, and relevant context operation has causal identity and a durable record or explicit capture-failure signal.
+- [x] G2: Completed tool results survive later interruption; command failures and uncertain side effects are accurately represented.
+- [ ] G3: Requests and calls reference the actual configuration, prompt, policy, scope, and fallback state they used, including individual skill invocations, reviewed arguments, and cancelled approval decisions.
+- [x] G4: Timing and available usage/cost are attributed correctly; a portable bundle supports offline reconstruction within its stated capture level.
 - [ ] All nine provider adapters have contract fixtures and documented availability limits.
-- [ ] Existing API/session compatibility and secret-handling tests pass.
-- [ ] The failed-run reconstruction scenario passes after process restart and export to a fresh directory.
-- [ ] Re-score components against the findings rubric using actual implementation evidence; do not raise scores solely because a planned milestone is complete.
+- [x] Existing API/session compatibility and secret-handling tests pass.
+- [x] The failed-run reconstruction scenario passes after process restart and export to a fresh directory.
+- [x] Re-score components against the findings rubric using actual implementation evidence; do not raise scores solely because a planned milestone is complete.
+
+G3 and the nine-adapter fixture item remain unchecked until the green candidate changes in [agent PR #100](https://github.com/esack7/propio-agent/pull/100) and [providers PR #16](https://github.com/esack7/propio-providers/pull/16) merge. The [acceptance review](../specs/runtime-traceability/acceptance-review.md) maps the test evidence and remaining observation limits.
 
 Detailed scratchpad revision tracking, claim-level summary provenance, and a graphical timeline can follow these priorities. The initial delivery must establish reliable evidence and offline inspection first.

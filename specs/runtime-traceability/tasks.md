@@ -17,7 +17,7 @@
 - [x] G2: Add structured command/write/edit/MCP outcomes and separate side-effect completion from artifact/capture failure.
 - [x] G2: Persist tool results incrementally and preserve assistant/tool ordering across interruption without replay.
 - [x] G3: Add redacted effective configuration and prompt-plan revisions with source, scope, and change causes.
-- [ ] G3: Record policy/approval decisions, reviewed arguments, mode and skill scope, and provider request mutations.
+- [ ] G3: Record policy/approval and cancellation decisions, reviewed-argument fingerprints, mode and per-invocation skill scope, and provider request mutations.
 - [x] G4: Instrument shared provider machinery and all adapters for attempts, timing, upstream IDs/models, stop reasons, errors, and usage.
 - [x] G4: Add completeness-aware usage and injectable pricing aggregation.
 - [x] G4: Implement side-effect-free journal inspection and portable, hash-verifiable standard export.
@@ -27,7 +27,7 @@
 ## Verification
 
 - [x] Run repository-required build, unit tests, formatting, and pinned Fallow checks in both worktrees.
-- [ ] Run deterministic two-turn, retry, summarization, batch interruption, cancellation race, remote timeout, disk failure, slow sink, truncated journal, and old-session resume fixtures.
+- [x] Run deterministic two-turn, retry, summarization, batch interruption, cancellation race, remote timeout, disk failure, slow sink, truncated journal, and old-session resume fixtures.
 - [x] Verify offline export inspection in a fresh directory with no provider or tool access.
 - [x] Benchmark token-heavy and tool-heavy traces for latency and disk growth.
 - [x] Re-score the findings rubric using concrete implementation evidence in `docs/traceability-reassessment.md`.
@@ -36,6 +36,7 @@
 
 - [Providers PR #15](https://github.com/esack7/propio-providers/pull/15) merged and package 0.5.0 published. It adds opt-in, per-adapter-attempt request payload snapshots for all nine adapters. Local build, 404 tests, formatting, Fallow, and GitHub CI passed. SDK-internal serialization and retries remain outside this observation boundary.
 - [Agent PR #98](https://github.com/esack7/propio-agent/pull/98) merged. It pins published providers 0.5.0, stores full-mode attempt bodies privately, and supports read-only playback of completed answer **and summary** responses from verified bundles.
-- The [acceptance review](acceptance-review.md) maps all twelve requirements to tests: ten met, one candidate pending review/merge of the new fixture, and one partial (the literal all-nine-adapter scenario grid). The [reassessment](../../docs/traceability-reassessment.md) rescored every original component conservatively.
-- The new two-turn/tool/retry/summary and delayed-sink fixtures are in [Agent PR #99](https://github.com/esack7/propio-agent/pull/99). Agent build, 1,630 tests, formatting, Fallow, and all PR checks pass; providers build, 404 tests, formatting, and Fallow pass. The latest local trace benchmark passed: full token 29.7 ms / 47 KB; tool 3,028 ms / 489 KB; workspace 950 ms / 51 KB, all under documented limits.
-- Remaining gates: review and merge the verification fixture; decide whether to add the exhaustive per-adapter matrix; then mark acceptance complete and run close-spec. No live provider or paid smoke tests were run.
+- [Agent PR #99](https://github.com/esack7/propio-agent/pull/99) merged the joined two-turn/tool/retry/summary and delayed-sink fixtures. The [acceptance review](acceptance-review.md) now maps eleven criteria to merged tests and the final A6 adapter matrix to a green candidate PR. The [reassessment](../../docs/traceability-reassessment.md) keeps scores tied to merged code.
+- [Providers PR #16](https://github.com/esack7/propio-providers/pull/16) adds the explicit nine-adapter scenario matrix: local build, 411 tests, formatting, Fallow, and all PR checks pass. [Agent PR #100](https://github.com/esack7/propio-agent/pull/100) adds stable skill-invocation lineage, reviewed-argument fingerprints, and distinct cancellation decisions: local build, 1,631 tests, formatting, Fallow, and all PR checks pass. The detailed G3 and all-adapter-fixture tasks remain unchecked until these PRs merge.
+- The latest local trace benchmark passed: full token 29.7 ms / 47 KB; tool 3,028 ms / 489 KB; workspace 950 ms / 51 KB, all under documented limits. No live provider or paid smoke tests were run.
+- Remaining gates: review and merge PRs #16 and #100; promote A6 and G3 to complete; merge the evidence PR; then run `close-spec` when the worktrees are no longer needed.
