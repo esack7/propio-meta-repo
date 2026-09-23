@@ -4,9 +4,9 @@ Date: 2026-09-22 (Pacific)
 
 Compared with: [original findings](traceability-findings.md) and [implementation plan](traceability-plan.md)
 
-Reviewed main commits: `propio-agent` `7b0e428`, `propio-providers` `4c64546`
+Reviewed main commits: `propio-agent` `7b0e428`, `propio-providers` `fe34bb5`
 
-These are engineering scores on the original 0–9 rubric: durable evidence, causal linkage, provenance, outcome accuracy, and reconstruction. They are deliberately conservative. The merged implementation was checked with builds and tests (agent: 1,630; providers: 404), formatting, Fallow, and the trace benchmark. The combined acceptance and delayed-sink fixtures from [agent PR #99](https://github.com/esack7/propio-agent/pull/99) are now merged; they strengthen verification without changing the component scores. Candidate [providers PR #16](https://github.com/esack7/propio-providers/pull/16) and [agent PR #100](https://github.com/esack7/propio-agent/pull/100) are not included in these merged-code scores. No live provider calls were made.
+These are engineering scores on the original 0–9 rubric: durable evidence, causal linkage, provenance, outcome accuracy, and reconstruction. They are deliberately conservative. The merged implementation was checked with builds and tests (agent: 1,630; providers: 411), formatting, Fallow, and the trace benchmark. The combined acceptance and delayed-sink fixtures from [agent PR #99](https://github.com/esack7/propio-agent/pull/99) and nine-adapter scenario matrix from [providers PR #16](https://github.com/esack7/propio-providers/pull/16) are now merged; they strengthen verification without changing the component scores. Candidate [agent PR #100](https://github.com/esack7/propio-agent/pull/100) is not included in these merged-code scores. No live provider calls were made.
 
 | Agent / CLI component | Before → now | Evidence and remaining limit |
 | --- | ---: | --- |
@@ -42,8 +42,8 @@ These are engineering scores on the original 0–9 rubric: durable evidence, cau
 
 | Provider component | Before → now | Evidence and remaining limit |
 | --- | ---: | --- |
-| Shared contract | 3 → 7 | [Trace contract](https://github.com/esack7/propio-providers/blob/4c6454641e0d03166e853b9a36dc3be96188be3d/src/trace.ts) adds request/attempt IDs, timings, usage availability, actual model/response metadata, mutation, and opt-in payload capture. |
-| Shared retry machinery | 4 → 7 | [Retry tests](https://github.com/esack7/propio-providers/blob/4c6454641e0d03166e853b9a36dc3be96188be3d/src/__tests__/trace.test.ts) verify distinct attempts, wait links and failures; retries performed invisibly inside SDKs are not guaranteed observable. |
+| Shared contract | 3 → 7 | [Trace contract](https://github.com/esack7/propio-providers/blob/fe34bb591024bf1042120bbeeb3fe309d4d5061c/src/trace.ts) adds request/attempt IDs, timings, usage availability, actual model/response metadata, mutation, and opt-in payload capture. |
+| Shared retry machinery | 4 → 7 | [Retry tests](https://github.com/esack7/propio-providers/blob/fe34bb591024bf1042120bbeeb3fe309d4d5061c/src/__tests__/trace.test.ts) verify distinct attempts, wait links and failures; retries performed invisibly inside SDKs are not guaranteed observable. |
 | Anthropic | 3 → 6 | Adapter tests cover response identity, cumulative/cache usage and raw termination; payload is SDK input, not wire bytes. |
 | Bedrock | 3 → 6 | AWS request ID, usage and raw termination are captured; a separate actual model is unavailable. |
 | Ollama | 3 → 6 | Actual model and local token counts are captured; upstream request ID is unavailable. |
@@ -61,4 +61,4 @@ These are engineering scores on the original 0–9 rubric: durable evidence, cau
 
 ## Priorities after this review
 
-The four priority gaps are materially improved. The literal all-nine-adapter scenario grid is now a tested candidate in [providers PR #16](https://github.com/esack7/propio-providers/pull/16), with per-adapter evidence mapped in [the acceptance review](../specs/runtime-traceability/acceptance-review.md). Stable skill-invocation-to-request lineage and reviewed-argument/cancellation records are candidates in [agent PR #100](https://github.com/esack7/propio-agent/pull/100). Neither candidate is counted as merged here. User-entered shell commands, scratchpad inventories, Docker identity, and a timeline UI are visible low-score follow-ups, not silently counted as completed by the core tracing work.
+The four priority gaps are materially improved. The literal all-nine-adapter scenario grid is merged in [providers PR #16](https://github.com/esack7/propio-providers/pull/16), with per-adapter evidence mapped in [the acceptance review](../specs/runtime-traceability/acceptance-review.md). Stable skill-invocation-to-request lineage and reviewed-argument/cancellation records remain candidates in [agent PR #100](https://github.com/esack7/propio-agent/pull/100), which is not counted as merged here. User-entered shell commands, scratchpad inventories, Docker identity, and a timeline UI are visible low-score follow-ups, not silently counted as completed by the core tracing work.

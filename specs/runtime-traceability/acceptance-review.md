@@ -2,9 +2,9 @@
 
 Date: 2026-09-22 (Pacific)
 
-Merged baseline: `propio-agent` main `7b0e428`; `propio-providers` main `4c64546`
+Merged baseline: `propio-agent` main `7b0e428`; `propio-providers` main `fe34bb5`
 
-Candidate closeout changes: [providers PR #16](https://github.com/esack7/propio-providers/pull/16) and [agent PR #100](https://github.com/esack7/propio-agent/pull/100)
+Merged adapter verification: [providers PR #16](https://github.com/esack7/propio-providers/pull/16). Candidate detailed G3 provenance: [agent PR #100](https://github.com/esack7/propio-agent/pull/100).
 
 This review maps the twelve criteria in `requirements.md` to executable evidence. “Met” means the stated behavior is merged and supported by code and a deterministic test; it does not imply that every upstream SDK field or external side effect is observable. “Candidate” means the tests pass locally and in PR CI but the change is not merged. “Partial” means the literal criterion has a remaining evidence gap.
 
@@ -15,12 +15,12 @@ This review maps the twelve criteria in `requirements.md` to executable evidence
 | A3 | Distinct shell, cancellation, launch, remote-unknown, and capture-failure outcomes | Met | Agent `src/tools/__tests__/implementations.test.ts`, `src/tools/__tests__/boundary.test.ts`, `src/mcp/__tests__/boundary.test.ts`, `src/__tests__/recoveryBehavior.test.ts`, and `src/__tests__/recovery.integration.test.ts` cover structured local outcomes, uncertain MCP completion, and retained side effects when local persistence fails. Merged `src/agent-core/__tests__/runtime.test.ts` delays the trace sink and confirms completion is recorded before the next tool dispatch. |
 | A4 | Request/tool links to effective configuration, prompt, policy, and scope | Met | Agent `src/__tests__/agent.test.ts` configuration-lineage and policy tests plus `src/agent-core/__tests__/runtime.test.ts` prompt/scope tests assert the applied revisions and reviewed tool dispatch. [Agent PR #100](https://github.com/esack7/propio-agent/pull/100) additionally links individual skill invocations to those revisions and matches reviewed-argument fingerprints to dispatch. |
 | A5 | OpenRouter mutation and xAI fallback as linked attempts | Met | Providers `src/__tests__/openrouter.test.ts` checks retry without tools and the mutation; `src/__tests__/xai.test.ts` checks distinct endpoint attempts. Shared attempt IDs/retry waits are checked in `src/__tests__/trace.test.ts`. |
-| A6 | Every adapter covers success, tools, retry, failure, absent usage, and applicable termination | Candidate | The explicit nine-adapter scenario matrix below is backed by the deterministic fixtures in [providers PR #16](https://github.com/esack7/propio-providers/pull/16), with all local and PR checks passing. SDK-internal retries remain outside the adapter-observed boundary. |
+| A6 | Every adapter covers success, tools, retry, failure, absent usage, and applicable termination | Met | The explicit nine-adapter scenario matrix below is backed by merged deterministic fixtures in [providers PR #16](https://github.com/esack7/propio-providers/pull/16), with all local and PR checks passing. SDK-internal retries remain outside the adapter-observed boundary. |
 | A7 | Usage/cost aggregation preserves cumulative, partial, unavailable, and unknown price | Met | Agent `src/trace/__tests__/measurements.test.ts` checks deduplication, purpose/attempt attribution, partial metrics, pricing provenance, resolver failure, and truncated-capture caps. No default price is inferred. |
 | A8 | Interrupted run exports and inspects offline without provider/tool access | Met | Agent `src/__tests__/recovery.integration.test.ts` and `src/trace/__tests__/journal.test.ts` move away the source before inspection; `src/__tests__/fullCapture.test.ts` verifies full-bundle material and read-only response playback. |
 | A9 | Standard output/export excludes synthetic secrets and reports omissions | Met | Agent `src/trace/__tests__/journal.test.ts` checks standard redaction; `src/__tests__/agent.test.ts` checks configuration secrets; `src/__tests__/fullCapture.test.ts` checks omitted credentials and missing material. This is a tested synthetic-secret policy, not a guarantee against arbitrary secrets in ordinary text; full bundles remain private. |
 | A10 | Compatibility and no implicit reusable-library trace I/O | Met | Agent `src/__tests__/agent.test.ts` exercises disabled/degraded tracing and prior session behavior; public boundary suites cover side-effect-free imports/construction. Providers tracing is optional and observers are isolated in `src/__tests__/trace.test.ts`. |
-| A11 | Builds, tests, formatting, pinned Fallow | Met | Merged agent PR #99 and providers PR #15 passed their gates. Candidate agent PR #100 passes build, 1,631 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24; candidate providers PR #16 passes build, 411 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. |
+| A11 | Builds, tests, formatting, pinned Fallow | Met | Merged agent PR #99 and providers PRs #15–16 passed their gates. Providers PR #16 passed build, 411 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. Candidate agent PR #100 passes build, 1,631 tests, formatting, Fallow, and all GitHub checks on Node 20 and 24. |
 | A12 | Measured token/tool overhead against documented thresholds | Met | Agent `npm run benchmark:trace` passed: full token 29.7 ms / 47,426 B; tool 3,028 ms / 489,152 B; workspace 950 ms / 50,757 B, all below the README limits. These are local fixtures, not live-provider latency. |
 
 ## Nine-adapter scenario matrix
@@ -41,7 +41,7 @@ Each linked suite exercises the concrete adapter with mocked transport. “Retry
 
 ## Remaining verification before closing the spec
 
-1. Review and merge providers PR #16 and agent PR #100, then promote A6 and the detailed G3 task from candidate to met.
+1. Review and merge agent PR #100, then mark the detailed G3 task complete. A6 is already met through merged providers PR #16.
 2. Merge this evidence PR and run `close-spec` only after its worktrees are no longer needed.
 3. Keep full-capture limits explicit: adapter payloads precede SDK serialization, hidden reasoning is unavailable, workspace capture excludes ignored/credential-shaped files, and external side effects are not reconstructed automatically.
 

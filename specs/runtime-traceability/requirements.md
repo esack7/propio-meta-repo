@@ -30,7 +30,7 @@ Implement durable end-to-end runtime traceability, accurate outcomes, configurat
 - [x] Shell nonzero exit, timeout, cancellation, launch failure, remote unknown outcome, and completed side effects followed by capture failure remain distinct.
 - [x] Each request and tool dispatch references the configuration, prompt, policy, and tool-scope revision actually used.
 - [x] OpenRouter request mutation and xAI endpoint fallback are represented as separate, linked attempts.
-- [ ] All nine adapters cover success, tool use, retry, failure, absent usage, and applicable streaming termination cases.
+- [x] All nine adapters cover success, tool use, retry, failure, absent usage, and applicable streaming termination cases.
 - [x] Usage aggregation deduplicates cumulative reports and exposes partial, unavailable, and unknown-price states.
 - [x] An interrupted run can be exported and inspected offline in a fresh directory without credentials, original home paths, provider calls, or tool execution.
 - [x] Standard output and exports exclude synthetic secrets while identifying omitted, redacted, missing, or pruned material.
@@ -38,7 +38,7 @@ Implement durable end-to-end runtime traceability, accurate outcomes, configurat
 - [x] Repository-required builds, tests, formatting, and pinned Fallow checks pass.
 - [x] Journal overhead is measured for token-heavy and tool-heavy fixtures and checked against a documented regression threshold.
 
-See [the acceptance review](acceptance-review.md) for evidence, limitations, and the remaining candidate A6 criterion. Checked items reflect merged deterministic evidence, not live-provider certification.
+See [the acceptance review](acceptance-review.md) for evidence and limitations. All twelve criteria now have merged deterministic evidence, not live-provider certification; the detailed G3 provenance task still awaits agent PR #100.
 
 ## Affected repositories
 
