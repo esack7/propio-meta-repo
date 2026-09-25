@@ -29,7 +29,7 @@ sh .claude/skills/create-spec/scripts/create-spec.sh project-repositories.yaml <
   --summary "<one-line summary>" repo-a repo-b
 ```
 
-5. Edit the generated Markdown files with gathered requirements. Do not hand-edit `repos.txt` after confirmation.
+5. Edit the generated Markdown files with gathered requirements. Plan all known slices, dependencies, acceptance IDs, and the existing working agreement in generated `delivery.json` using [delivery guidance](../../../docs/DELIVERY.md). Commit the initial plan deliberately; keep `tasks.md` linked to delivery state rather than copying statuses. Do not hand-edit `repos.txt` after confirmation.
 
 ## Correcting repository selection
 
@@ -50,7 +50,7 @@ The helper atomically replaces only `repos.txt`. It refuses amendments if featur
 
 ## Next steps
 
-Tell the user to run **setup-repositories** (if clones are missing) then **prepare-spec** `<spec-name>` to create feature worktrees.
+For a spec-only request, report the created plan. If implementation is already authorized, continue with **setup-repositories** as needed and **prepare-spec** without asking the user to repeat that authorization.
 
 Do **not** create worktrees or branches in this skill.
 

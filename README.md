@@ -22,6 +22,8 @@ Your source repositories remain independent. The meta-repo tracks the map and th
 - Git 2.17 or newer
 - macOS or Linux with a POSIX-compatible shell
 - [Codex](https://openai.com/codex/), Claude Code, or Propio for the agent-driven workflows
+- Python 3.9+ for delivery-aware workflows; GitHub CLI (`gh`) for PR status and squash-merge evidence
+- Node.js and npm for package-artifact checks
 - Access to every Git remote you add to the project map
 
 The bundled helpers do not require `yq` or another YAML parser.
@@ -120,6 +122,7 @@ specs/organization-wide-tags/
 ├── requirements.md
 ├── design.md
 ├── tasks.md
+├── delivery.json
 └── repos.txt
 ```
 
@@ -147,6 +150,11 @@ Rerunning preparation safely skips a registered worktree already on the expected
 
 ### 3. Implement and review
 
+Plan reviewable slices and acceptance evidence in `delivery.json`. Use `spec-status`
+to inspect progress, `start-slice` to create each PR branch, and `verify-packages`
+to test exact package artifacts before publication. See [Delivery workflows](docs/DELIVERY.md)
+for commands, authorization boundaries, migration of existing specs, and CI.
+
 Ask your agent to work from the specification directory. Because the spec, selected repositories, and repository-specific context are all explicit, it can reason across the feature while keeping changes isolated in the correct worktrees.
 
 When one selected repository publishes a package that another consumes, link them so the change is testable immediately instead of after a release:
@@ -173,7 +181,7 @@ Claude Code: /close-spec organization-wide-tags
 Propio:      /skill close-spec organization-wide-tags
 ```
 
-The close workflow checks every selected worktree before removing any of them. It removes worktrees and prunes their metadata, but it does not delete feature branches or specification documents.
+For delivery-aware specs, normal close requires every slice verified and current merge evidence. Explicit `--worktrees-only` permits early cleanup without declaring completion. Legacy specs retain their cleanup behavior. The close workflow checks every selected worktree before removing any of them. It removes worktrees and prunes their metadata, but it does not delete feature branches or specification documents.
 
 ## Keep reference context current
 

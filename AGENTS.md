@@ -70,11 +70,30 @@ Invoke workflows through your agent's native skill syntax or natural language.
 | Start a feature spec | `$create-spec <description>` | `/create-spec <description>` | `/skill create-spec <description>` | "create a spec for tags" |
 | Create feature worktrees | `$prepare-spec <spec-name>` | `/prepare-spec <spec-name>` | `/skill prepare-spec <spec-name>` | "prepare the tags spec" |
 | Remove feature worktrees | `$close-spec <spec-name>` | `/close-spec <spec-name>` | `/skill close-spec <spec-name>` | "close the tags spec" |
+| Inspect delivery state | `$spec-status` | `/spec-status` | `/skill spec-status` | "what remains in this spec?" |
+| Start a PR slice | `$start-slice` | `/start-slice` | `/skill start-slice` | "start the next planned slice" |
+| Verify package artifacts | `$verify-packages` | `/verify-packages` | `/skill verify-packages` | "test a packed package against its consumer" |
 | Link local package checkouts | `$link-local-packages` | `/link-local-packages` | `/skill link-local-packages` | "link providers into the agent locally" |
 
 Canonical skills live under `.claude/skills/<skill-name>/`. Codex discovers thin compatibility wrappers under `.agents/skills/<skill-name>/`; those wrappers point back to the canonical skill and contain no helper copies. Propio discovers the canonical definitions through `.propio/skills/<skill-name>` symlinks. Cursor discovers `link-local-packages` through `.cursor/commands/<skill-name>.md` (as `/link-local-packages`) and `.cursor/rules/<skill-name>.mdc`; both are wrappers pointing back to the canonical skill.
 
-**Safety rule:** Git and filesystem mutations run only through bundled skill helpers. Agents select inputs and explain results; they do not reproduce or bypass helper logic.
+**Safety rule:** Bundled helpers own reference-clone setup/refresh, spec directory and `repos.txt` creation/amendment, feature-worktree creation/removal, slice branch switching/registration, and local package links. Do not reproduce or bypass those helpers. Ordinary source/document edits, delivery-record updates, tests, commits, pushes, and PR preparation within the authorized scope use normal tools. Work on the meta-repo itself may use a separate branch or isolated checkout without creating a cross-repository spec. Merging, publishing, and external messages follow the user's authorization.
+
+## Delivery coordination
+
+Use [docs/DELIVERY.md](docs/DELIVERY.md) for the delivery record, working agreement,
+acceptance evidence, and package validation. `delivery.json` is the authoritative
+slice/PR/status record; `repos.txt` remains the authoritative repository selection.
+Record the user's existing authorization once and continue approved work without
+repeated confirmation. Preserve explicit assessment-only requests. At each review
+handoff report the slice, evidence, remaining scope, next action, and actual decision
+needed. Update state after a merge before advancing. A merged slice, verified spec,
+and removed worktrees are separate milestones.
+
+Plan criteria and risk-specific checks before implementation. Use `spec-status`
+when resuming or asking what remains; use `--remote` when current PR state matters.
+Use `start-slice` for each new PR branch, and keep branch/evidence history through
+closeout. Do not suggest completion until every criterion and slice is verified.
 
 ### setup-repositories
 
@@ -94,11 +113,11 @@ Gathers requirements, proposes affected repositories from the project map, obtai
 
 ### prepare-spec
 
-Validates `repos.txt`, requires reference clones under `repos/<name>/`, fetches and prunes `origin`, and verifies every `origin/<default_branch>` before creating anything. It then creates `feature/<spec-name>` worktrees under `specs/<spec-name>/repos/`, rolling back newly created clean worktrees and unchanged branches if a later creation fails. It skips an already-correct worktree on the expected feature branch without requiring it to be clean. A worktree on another branch is refused, as are pre-existing feature branches unless you explicitly authorize reuse.
+Validates `repos.txt`, requires reference clones under `repos/<name>/`, fetches and prunes `origin`, and verifies every `origin/<default_branch>` before creating anything. It then creates `feature/<spec-name>` worktrees under `specs/<spec-name>/repos/`, rolling back newly created clean worktrees and unchanged branches if a later creation fails. It skips an already-correct worktree on the expected feature branch without requiring it to be clean. Registered slice branches are also accepted. Other branches are refused. Reopening uses the latest registered slice branch (or the original feature branch); retained branch reuse requires explicit authorization.
 
 ### close-spec
 
-Two-phase safety check across all listed repositories. On success, removes worktrees and prunes worktree metadata only—never deletes local or remote branches or specification documents.
+Two-phase safety check across all listed repositories. Delivery-aware specs additionally require verified acceptance and current merge evidence, including exact PR-head proof for squash merges. Explicit `--worktrees-only` allows early cleanup without certifying completion. Legacy specs retain cleanup semantics. On success, removes worktrees and prunes metadata only—never deletes branches or specification documents.
 
 ### link-local-packages
 
@@ -119,7 +138,8 @@ Contexts must not be mixed: linking a feature worktree to a reference clone sile
 
 ## Branches and base refs
 
-- Feature branches: `feature/<spec-name>` created from `origin/<git.default_branch>` at prepare time.
+- Slice branches: `codex/<spec-name>-<slice-id>` registered by `start-slice`; retain them for evidence and reopening.
+- Initial feature branches: `feature/<spec-name>` created from `origin/<git.default_branch>` at prepare time.
 - Helpers never guess `main`, `master`, or another base branch; they use only `git.default_branch` from the project map.
 - Spec names are durable identifiers. Reopening an existing spec means running `prepare-spec` against its existing directory with explicit authorization to reuse retained feature branches. A new iteration uses a new spec name.
 
@@ -134,14 +154,15 @@ Contexts must not be mixed: linking a feature worktree to a reference clone sile
 
 1. **create-spec** — requirements, design, tasks, confirmed `repos.txt`.
 2. **prepare-spec** — feature worktrees on `feature/<spec-name>`.
-3. Implement in worktrees under `specs/<spec-name>/repos/` (not in reference clones).
-4. **close-spec** — remove worktrees when done; branches and spec documents remain.
+3. Plan slices and acceptance evidence in `delivery.json`; use **start-slice** to implement in worktrees under `specs/<spec-name>/repos/` (not in reference clones).
+4. **spec-status** — reconcile evidence and PR state after reviews and merges.
+5. **close-spec** — check completion and remove worktrees when done; branches and spec documents remain.
 
 Multiple specs may be active concurrently; paths and branch names provide isolation.
 
 ### Reopening a closed spec
 
-Run `prepare-spec <spec-name>` on the existing spec directory and explicitly authorize reuse of retained `feature/<spec-name>` branches.
+Run `prepare-spec <spec-name>` on the existing spec directory and explicitly authorize reuse of retained branches. Delivery-aware specs reopen the latest registered branch per repository; legacy specs reopen `feature/<spec-name>`.
 
 ### Manual branch cleanup
 

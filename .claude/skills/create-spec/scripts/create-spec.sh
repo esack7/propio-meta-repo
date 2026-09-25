@@ -64,6 +64,10 @@ if [ "$AMEND" -eq 1 ]; then
 
 	PARSE="$SHARED/parse-repos-txt.sh"
 	[ -x "$PARSE" ] || die "missing parse helper: $PARSE"
+	if [ -f "$SPEC_DIR/delivery.json" ]; then
+		python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(1 if d.get("slices") else 0)' "$SPEC_DIR/delivery.json" || \
+			die "cannot amend repos.txt after delivery slices are recorded; use a new spec"
+	fi
 	OLD_REPOS=$("$PARSE" "$SPEC_DIR/repos.txt")
 	WORKTREES_DIR="$SPEC_DIR/repos"
 	BRANCH="feature/$SPEC"
@@ -161,6 +165,8 @@ substitute_template "$TEMPLATE_DIR/requirements.md" "$TMP_SPEC/requirements.md"
 substitute_template "$TEMPLATE_DIR/design.md" "$TMP_SPEC/design.md"
 substitute_template "$TEMPLATE_DIR/tasks.md" "$TMP_SPEC/tasks.md"
 cp "$TMP_REPOS" "$TMP_SPEC/repos.txt"
+# SPEC is a validated slug; this JSON needs no additional runtime dependency.
+printf '{"version":1,"spec":"%s","working_agreement":"","criteria":{},"slices":[]}\n' "$SPEC" > "$TMP_SPEC/delivery.json"
 
 mv "$TMP_SPEC" "$SPEC_DIR"
 trap - EXIT INT HUP TERM
