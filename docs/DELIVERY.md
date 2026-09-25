@@ -59,7 +59,9 @@ branches. Example (replace the sample repository with a selected repository):
 ```
 
 Slice and criterion IDs are lowercase slugs. Dependencies name earlier slices,
-which prevents cycles. Use one slice per repository/PR; coordinated PRs can share
+which prevents cycles. `start-slice` records a unique, increasing `start_order` when
+it starts a slice. For a manually registered branch, record its historical
+`start_order` if more than one branch exists for that repository. Use one slice per repository/PR; coordinated PRs can share
 criteria. Every slice must cover at least one criterion. Plan the entire known
 scope before implementing, including verification work. Add new discoveries to
 the plan instead of silently treating them as optional.
@@ -112,7 +114,10 @@ For an existing PR branch, explicitly record its repository, branch, PR, criteri
 and evidence in a slice, then inspect `status --remote`. This registers the branch
 without renaming or switching it. Do not register an unrelated branch merely to
 make cleanup pass. Preparation accepts registered slices and, with explicit
-`--reuse-branches`, reopens the latest recorded branch for each repository.
+`--reuse-branches`, reopens an active slice (`implementing`, `review`, or
+`blocked`) first. If none is active, it uses the greatest `start_order`. A legacy
+record with multiple started branches and no known order must be corrected before
+reopening; the helper does not guess from array position.
 
 ## Completion and cleanup
 

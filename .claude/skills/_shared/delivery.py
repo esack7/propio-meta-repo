@@ -95,7 +95,7 @@ class Delivery:
                 or not description.strip()
             ):
                 raise ValueError("criteria need slug IDs and nonempty descriptions")
-        seen, branches = set(), set()
+        seen, branches, start_orders = set(), set(), set()
         for s in data["slices"]:
             if not isinstance(s, dict):
                 raise ValueError("each slice must be an object")
@@ -120,6 +120,18 @@ class Delivery:
                 raise ValueError(
                     "PR must be a positive number in the selected repository"
                 )
+            start_order = s.get("start_order")
+            if start_order is not None:
+                if (
+                    type(start_order) is not int
+                    or start_order <= 0
+                    or start_order in start_orders
+                    or not s.get("branch")
+                ):
+                    raise ValueError(
+                        f"{sid}: start_order must be a unique positive integer on a started slice"
+                    )
+                start_orders.add(start_order)
             branch = s.get("branch")
             if branch:
                 run("git", "check-ref-format", "--branch", branch)
@@ -312,12 +324,27 @@ def execute(args):
     if args.command == "active-branch":
         if args.repo not in d.repos:
             raise ValueError("repository not selected")
-        branches = [
-            s["branch"]
-            for s in data["slices"]
-            if s["repo"] == args.repo and s.get("branch")
+        started = [
+            s for s in data["slices"] if s["repo"] == args.repo and s.get("branch")
         ]
-        print(branches[-1] if branches else f"feature/{d.spec}")
+        active = [
+            s for s in started if s["status"] in {"implementing", "review", "blocked"}
+        ]
+        if len(active) > 1:
+            raise ValueError(
+                f"{args.repo}: multiple active slices; reconcile their statuses before reopening"
+            )
+        if active:
+            chosen = active[0]
+        elif len(started) <= 1:
+            chosen = started[0] if started else None
+        elif any(s.get("start_order") is None for s in started):
+            raise ValueError(
+                f"{args.repo}: start order is unknown; add start_order to older registered slices before reopening"
+            )
+        else:
+            chosen = max(started, key=lambda s: s["start_order"])
+        print(chosen["branch"] if chosen else f"feature/{d.spec}")
         return
     if args.command in {"branch", "merged-branch"}:
         s = next(
@@ -404,7 +431,10 @@ def execute(args):
         baseline = git(ref, "rev-parse", base)
         git(wt, "checkout", "--no-track", "-b", branch, baseline)
         try:
-            s.update(branch=branch, status="implementing")
+            next_order = (
+                max((x.get("start_order") or 0 for x in data["slices"]), default=0) + 1
+            )
+            s.update(branch=branch, status="implementing", start_order=next_order)
             d.validate(data)
             atomic_json(d.path, data)
         except Exception:
@@ -447,7 +477,10 @@ def execute(args):
             row["warning"] = str(exc)
         report["repositories"].append(row)
     for s in data["slices"]:
-        row = {k: s.get(k) for k in ("id", "repo", "status", "branch", "pr", "note")}
+        row = {
+            k: s.get(k)
+            for k in ("id", "repo", "status", "branch", "start_order", "pr", "note")
+        }
         if args.remote and s.get("pr"):
             try:
                 p = d.pr_state(s)

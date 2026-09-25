@@ -100,7 +100,7 @@ for name in $NAMES; do
 		fi
 	fi
 	if [ "$unpushed" -gt 0 ] && [ "$ACK_UNPUSHED" -eq 0 ]; then
-		die "specs/$SPEC/repos/$name has unpushed commits on $BRANCH; use --acknowledge-unpushed to close anyway (branch is retained)"
+		die "specs/$SPEC/repos/$name has unpushed commits on $wt_branch; use --acknowledge-unpushed to close anyway (branch is retained)"
 	fi
 	if [ "$OFFLINE" -eq 1 ]; then
 		STALE_NOTE=1

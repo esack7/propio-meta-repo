@@ -191,6 +191,39 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse((self.directory / ".delivery.lock").exists())
         self.engine("start", "first", ok=False)
 
+    def test_reopen_prefers_actual_active_slice_over_array_order(self):
+        self.data["slices"].append(self.slice("second", "a"))
+        self.save()
+        self.engine("start", "second")
+        self.reload()
+        self.change()
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.data["slices"][1]["status"] = "merged"
+        self.save()
+        self.engine("start", "first")
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["start_order"], 2)
+        self.assertEqual(self.data["slices"][1]["start_order"], 1)
+        self.helper("close-spec", "example", "--worktrees-only")
+        self.helper("prepare-spec", "example", "--reuse-branches")
+        self.assertEqual(
+            self.git(self.wt(), "branch", "--show-current"), "codex/example-first"
+        )
+        self.data["slices"][0]["status"] = "merged"
+        self.save()
+        self.helper("close-spec", "example", "--worktrees-only")
+        self.helper("prepare-spec", "example", "--reuse-branches")
+        self.assertEqual(
+            self.git(self.wt(), "branch", "--show-current"), "codex/example-first"
+        )
+
+    def test_unpushed_error_names_checked_out_slice_branch(self):
+        self.start()
+        self.change()
+        output = self.helper("close-spec", "example", "--worktrees-only", ok=False)
+        self.assertIn("has unpushed commits on codex/example-first", output)
+        self.assertNotIn("has unpushed commits on feature/example", output)
+
     def test_dirty_and_lock_refusals_preserve_state(self):
         before = self.state_path.read_bytes()
         (self.wt() / "untracked").write_text("keep")
