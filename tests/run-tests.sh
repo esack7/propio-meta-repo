@@ -74,7 +74,7 @@ for script in "$EXTRACT" "$PARSE" "$SETUP" "$REFRESH" "$PREPARE" "$CLOSE" "$CREA
 done
 
 # Skill metadata checks
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
 	skill_file="$ROOT/.claude/skills/$skill/SKILL.md"
 	if [ -f "$skill_file" ] && grep -q '^name: '"$skill" "$skill_file" && grep -q '^description:' "$skill_file"; then
 		pass "skill metadata: $skill"
@@ -93,7 +93,7 @@ done
 
 # Codex compatibility wrappers (real directories are used because Codex discovery
 # does not reliably follow project-local skill symlinks).
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
 	wrapper="$ROOT/.agents/skills/$skill"
 	canonical="../../../.claude/skills/$skill/SKILL.md"
 	if [ -d "$wrapper" ] && [ ! -L "$wrapper" ] && [ -f "$wrapper/SKILL.md" ] && \
@@ -106,7 +106,7 @@ for skill in setup-repositories refresh-repositories create-spec prepare-spec cl
 done
 
 # Propio symlinks
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
 	link="$ROOT/.propio/skills/$skill"
 	if [ -L "$link" ] && [ -f "$link/SKILL.md" ]; then
 		pass "propio symlink: $skill"
@@ -673,8 +673,8 @@ SPEC_UNPUSHED_DIR="$META/specs/$SPEC_UNPUSHED"
 	git add feature.txt
 	git commit -m "feature work" >/dev/null
 )
-assert_fail 'close refuses unpushed commits without remote feature branch' "$META_CLOSE" "$MAP" "$SPEC_UNPUSHED"
-if "$META_CLOSE" "$MAP" "$SPEC_UNPUSHED" --acknowledge-unpushed >/dev/null 2>&1; then
+assert_fail 'close refuses unpushed commits without remote feature branch' "$META_CLOSE" "$MAP" "$SPEC_UNPUSHED" --worktrees-only
+if "$META_CLOSE" "$MAP" "$SPEC_UNPUSHED" --worktrees-only --acknowledge-unpushed >/dev/null 2>&1; then
 	pass 'close accepts unpushed commits when acknowledged'
 else
 	fail 'close accepts unpushed commits when acknowledged'
@@ -693,7 +693,7 @@ SPEC_REMOTE_DIR="$META/specs/$SPEC_REMOTE"
 )
 FEATURE_SHA=$(git -C "$SPEC_REMOTE_DIR/repos/repo-a" rev-parse HEAD)
 git -C "$META/repos/repo-a" push origin "feature/$SPEC_REMOTE" >/dev/null 2>&1
-"$META_CLOSE" "$MAP" "$SPEC_REMOTE" >/dev/null 2>&1
+"$META_CLOSE" "$MAP" "$SPEC_REMOTE" --worktrees-only >/dev/null 2>&1
 
 # An unregistered Git directory must fail preflight before any valid worktree is removed.
 SPEC_UNREGISTERED=feature-unregistered
@@ -704,7 +704,7 @@ git -C "$META/repos/repo-b" worktree remove "$SPEC_UNREGISTERED_DIR/repos/repo-b
 git clone --branch main "$ORIGIN_B" "$SPEC_UNREGISTERED_DIR/repos/repo-b" >/dev/null 2>&1
 git -C "$SPEC_UNREGISTERED_DIR/repos/repo-b" checkout -b "feature/$SPEC_UNREGISTERED" >/dev/null 2>&1
 assert_fail 'close rejects unregistered Git directory during preflight' \
-	"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED"
+	"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED" --worktrees-only
 if [ -d "$SPEC_UNREGISTERED_DIR/repos/repo-a" ]; then
 	pass 'close retains earlier worktrees on unregistered-directory failure'
 else
@@ -713,7 +713,7 @@ fi
 rm -rf "$SPEC_UNREGISTERED_DIR/repos/repo-b"
 git -C "$META/repos/repo-b" worktree add "$SPEC_UNREGISTERED_DIR/repos/repo-b" \
 	"feature/$SPEC_UNREGISTERED" >/dev/null 2>&1
-"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED" >/dev/null 2>&1
+"$META_CLOSE" "$MAP" "$SPEC_UNREGISTERED" --worktrees-only >/dev/null 2>&1
 
 # Missing worktree directories must have their stale registration pruned.
 SPEC_STALE=feature-stale
@@ -726,7 +726,7 @@ if [ "$(worktree_registered_at "$META/repos/repo-a" "$SPEC_STALE_DIR/repos/repo-
 else
 	fail 'stale worktree registration fixture created'
 fi
-if "$META_CLOSE" "$MAP" "$SPEC_STALE" >/dev/null 2>&1 && \
+if "$META_CLOSE" "$MAP" "$SPEC_STALE" --worktrees-only >/dev/null 2>&1 && \
 	[ "$(worktree_registered_at "$META/repos/repo-a" "$SPEC_STALE_DIR/repos/repo-a")" != "yes" ]; then
 	pass 'close prunes stale worktree registration'
 else
@@ -743,11 +743,11 @@ if "$META_PREPARE" "$MAP" "$SPEC_REMOTE" --reuse-branches >/dev/null 2>&1; then
 else
 	fail 'prepare-spec reuses remote-only feature branch'
 fi
-"$META_CLOSE" "$MAP" "$SPEC_REMOTE" >/dev/null 2>&1
+"$META_CLOSE" "$MAP" "$SPEC_REMOTE" --worktrees-only >/dev/null 2>&1
 
 # Two-repo atomic preflight: dirty repo-a must not remove any worktree
 printf 'dirty\n' >> "$SPEC_DIR/repos/repo-a/local.txt"
-assert_fail 'close refuses when any worktree dirty' "$META_CLOSE" "$MAP" "$SPEC"
+assert_fail 'close refuses when any worktree dirty' "$META_CLOSE" "$MAP" "$SPEC" --worktrees-only
 [ -d "$SPEC_DIR/repos/repo-a" ] && [ -d "$SPEC_DIR/repos/repo-b" ] && \
 	pass 'close retains all worktrees when preflight fails' || \
 	fail 'close retains all worktrees when preflight fails'
@@ -755,11 +755,11 @@ git -C "$SPEC_DIR/repos/repo-a" checkout -- local.txt 2>/dev/null || rm -f "$SPE
 
 # Origin mismatch blocks close-spec
 git -C "$META/repos/repo-a" remote set-url origin "$WORKDIR/wrong.git"
-assert_fail 'close-spec rejects origin mismatch' "$META_CLOSE" "$MAP" "$SPEC"
+assert_fail 'close-spec rejects origin mismatch' "$META_CLOSE" "$MAP" "$SPEC" --worktrees-only
 git -C "$META/repos/repo-a" remote set-url origin "$saved_origin"
 
 # Close removes worktrees
-if "$META_CLOSE" "$MAP" "$SPEC" >/dev/null 2>&1; then
+if "$META_CLOSE" "$MAP" "$SPEC" --worktrees-only >/dev/null 2>&1; then
 	pass 'close-spec removes worktrees'
 else
 	fail 'close-spec removes worktrees'
@@ -778,9 +778,9 @@ else
 fi
 
 git -C "$META/repos/repo-a" remote set-url origin "$WORKDIR/does-not-exist.git"
-assert_fail 'close refuses on fetch failure' "$META_CLOSE" "$MAP" "$SPEC"
+assert_fail 'close refuses on fetch failure' "$META_CLOSE" "$MAP" "$SPEC" --worktrees-only
 git -C "$META/repos/repo-a" remote set-url origin "$ORIGIN_A"
-if "$META_CLOSE" "$MAP" "$SPEC" --offline --acknowledge-unpushed >/dev/null 2>&1; then
+if "$META_CLOSE" "$MAP" "$SPEC" --worktrees-only --offline --acknowledge-unpushed >/dev/null 2>&1; then
 	pass 'offline close with clean worktrees'
 else
 	fail 'offline close with clean worktrees'
@@ -939,8 +939,8 @@ if command -v node >/dev/null 2>&1; then
 
 	# Preflight is atomic: a failure on one consumer must not leave an earlier
 	# consumer already linked.
-	printf '%s\n' '{"name":"@test/dep","version":"0.9.0"}' > "$DEP_LINK/package.json" 2>/dev/null || \
-		{ mkdir -p "$DEP_LINK"; printf '%s\n' '{"name":"@test/dep","version":"0.9.0"}' > "$DEP_LINK/package.json"; }
+	mkdir -p "$DEP_LINK"
+	printf '%s\n' '{"name":"@test/dep","version":"0.9.0"}' > "$DEP_LINK/package.json"
 	mkdir -p "$LINK_META/repos/pkg-second"
 	printf '%s\n' '{"name":"@test/second","version":"1.0.0","dependencies":{"@test/dep":"0.9.0"}}' \
 		> "$LINK_META/repos/pkg-second/package.json"
@@ -1005,6 +1005,12 @@ if command -v propio >/dev/null 2>&1; then
 	printf 'NOTE: Propio native skill discovery smoke tests not run in the automated suite (see docs/VERIFICATION.md)\n'
 else
 	printf 'NOTE: Propio CLI unavailable; native discovery unverified\n'
+fi
+
+if python3 "$ROOT/tests/test-delivery.py"; then
+	pass 'delivery and package integration tests'
+else
+	fail 'delivery and package integration tests'
 fi
 
 printf '\nTests complete: %s passed, %s failed\n' "$PASS" "$FAIL"
