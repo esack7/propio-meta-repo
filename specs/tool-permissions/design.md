@@ -1,0 +1,320 @@
+# Design: tool-permissions
+
+## Overview
+
+Introduce the `policy` primitive and put an operator decision in front of tool
+side effects. Scope and acceptance come from the `tool-permissions` section of
+[maturity-audit-roadmap/design.md](../maturity-audit-roadmap/design.md).
+
+Sections marked **Proposal** settled what the roadmap left open. They were
+drafted from the code at `propio-agent` `efa1de8` and agreed on 2026-11-12,
+with one correction to "Modes" recorded there.
+
+## What exists at the baseline
+
+| Piece | Location | Use |
+| --- | --- | --- |
+| Authorization hook, evaluated on a detached argument snapshot before every dispatch; a throw is a denial | `AgentIntegrations.authorizeTool`, `src/agent-core/types.ts:107`; `src/agent-core/runtime.ts` `authorizeApplicationToolExecution` | Enforcement point. Already async and abortable, so it can wait for an answer. |
+| Decision record with actor, rule, reason, argument fingerprint | `recordToolPolicyDecision`, `src/agent-core/runtime.ts` | Trace record. `actor` already admits `"user"`. |
+| Application decision: plan-file rule, plan/discover bash classifier, otherwise allow with rule `mode_policy` | `Agent.authorizeToolExecution`, `src/agent.ts:751` | Replaced by a call into `policy` after the existing mode checks. |
+| Registry `approve` callback, fail-closed | `ToolRegistryOptions`, `src/tools/execution.ts` | Left as is. Policy goes through `authorizeTool` so MCP tools, which bypass this registry, are covered. |
+| Global-install prompt | `BashTool.assertGlobalInstallAllowed`, `src/tools/bash.ts:227`; `src/tools/globalInstallGuard.ts` | Classifier kept; the prompt and the `PROPIO_ALLOW_GLOBAL_INSTALLS` gate move into the rule model. |
+| Settings file | `~/.propio/settings.json`, `runtime` object, `src/config/runtimeConfig.ts` | Gains a `permissions` object. |
+| Modes | `execute`, `plan`, `discover`; `--mode`; `src/modes` | See "Modes" below. |
+| MCP tool names | `mcp__<server>__<tool>`, `src/mcp/toolName.ts` | Rule matching on server and tool. |
+| Path resolution | `resolveToolPath`, `src/tools/shared.ts`; absolute paths pass through | Confinement check uses the resolved path. |
+| Dependencies | `minimatch`, `zod` present; `ajv` only transitively through the MCP SDK | See "Schema validation". |
+
+## Approach
+
+### Module layout
+
+`src/policy/` is new and is exported as `@propio-ai/agent/policy`. It imports
+nothing else from `src/` and nothing that touches the filesystem, process, or
+network. Everything environment-specific is passed in.
+
+```
+src/policy/
+  capabilities.ts   capability vocabulary, ToolMetadata
+  rules.ts          rule parsing, matching, precedence
+  modes.ts          permission modes
+  presets.ts        named presets
+  engine.ts         PolicyEngine: evaluate(request) -> decision
+  approval.ts       ApprovalRequest, ApprovalAnswer, grant derivation
+  store.ts          PermissionStore interface, in-memory implementation
+  index.ts
+```
+
+File-backed storage, the prompt, the `/permissions` command, and flag parsing
+live in the application (`src/config`, `src/ui`, `src/index.ts`, `src/agent.ts`).
+
+### Schema validation
+
+`ToolExecutionRegistry.executeWithStatus` validates arguments against the
+tool's advertised schema before `approve` and before the implementation. MCP
+calls are validated the same way in `McpManager` against the server's schema. A
+failure returns a new status `invalid_arguments` whose content lists each
+failing path and reason, so the model can correct the call. Validation runs
+before policy: an invalid call is never shown to the operator.
+
+**Proposal: validator.** Add `ajv` as a direct dependency. Tool schemas are JSON
+Schema, including arbitrary ones from MCP servers; `zod` would need a
+conversion layer. It is already in the install tree through the MCP SDK.
+Compiled validators are cached per registry instance, not at module level.
+
+### Tool metadata
+
+```ts
+type Capability = "read" | "workspace_write" | "process" | "network" | "external";
+
+interface ToolMetadata {
+  readonly capabilities: readonly Capability[];
+  readonly readOnly: boolean;
+  readonly concurrencySafe: boolean;
+}
+```
+
+`ExecutableTool` gains an optional `metadata`. A tool without it is treated as
+`{ capabilities: ["external"], readOnly: false, concurrencySafe: false }`, which
+is also the MCP default, so an undeclared tool always asks.
+
+| Tool | Capabilities | Read-only | Concurrency-safe |
+| --- | --- | :-: | :-: |
+| `read`, `grep`, `find`, `ls` | `read` | yes | yes |
+| `write`, `edit` | `workspace_write` | no | no |
+| `bash` | `process` | no | no |
+| `skill` | `read` | yes | no |
+| MCP | `external` | no | no |
+
+`network` is in the vocabulary for `tools-hardening` (web fetch); nothing
+declares it yet.
+
+### Rule syntax — Proposal
+
+A rule is a string, `Tool` or `Tool(pattern)`, placed in an `allow`, `ask`, or
+`deny` list.
+
+| Form | Matches |
+| --- | --- |
+| `read`, `bash` | Every call to that tool |
+| `edit(src/**)` | File tools: `minimatch` glob against the resolved path. Relative patterns are relative to the workspace; `/abs/**` and `~/**` are absolute. |
+| `bash(npm run test:*)` | `bash`: command prefix. A trailing `:*` matches the prefix followed by end of string or a space. Without it the match is exact. |
+| `mcp__github` | Every tool of one MCP server |
+| `mcp__github__create_issue` | One MCP tool |
+| `capability:workspace_write` | Every tool declaring that capability |
+
+A `bash` allow rule never matches a command containing `;`, `&&`, `||`, `|`, a
+newline, backticks, or `$(`, so `bash(git status:*)` cannot approve
+`git status; rm -rf x`. Such commands fall through to `ask`. Deny and ask rules
+match on the same prefix test applied to each segment, so a deny cannot be
+evaded by chaining.
+
+Precedence: any matching deny, then any matching ask, then any matching allow,
+then the mode default. Sources are merged before precedence is applied: preset
+rules, user rules, session grants. A session grant is an allow rule with session
+lifetime, so a deny from any source beats it.
+
+A rule that fails to parse is reported with its text and position, and the
+store load fails; it is never silently dropped.
+
+### Modes — Proposal
+
+Permission mode is a second axis beside the existing agent mode. The agent mode
+(`execute`, `plan`, `discover`) keeps selecting the tool surface and the plan
+and bash classifiers. The permission mode selects the default for calls no rule
+matched. The roadmap listed all five as one set; two settings were chosen so
+that `policy` knows nothing about plan mode and leaving plan mode returns to
+the permission mode that was active.
+
+In `plan` and `discover` the existing checks run first and their denials stand,
+including under `bypass`. Two things those checks approve are allowed without a
+prompt, with rule `agent_mode:<mode>`: a `bash` command the classifier passes
+as read-only, and a write or edit to the approved plan file. Explicit deny and
+ask rules still apply to both. Every other call continues into policy.
+
+| Permission mode | `read` in workspace | `read` outside | `workspace_write` in workspace | `process`, `external`, `network` |
+| --- | --- | --- | --- | --- |
+| `ask` (default) | allow | ask | ask | ask |
+| `accept-edits` | allow | ask | allow | ask |
+| `bypass` | allow | allow | allow | allow |
+
+`plan` and `discover` in the roadmap's list are the existing agent modes with
+permission mode `ask` underneath. `bypass` shows a persistent label in the
+footer and is recorded on every decision as rule `mode:bypass`.
+
+File tools writing outside the workspace ask in every mode except `bypass`.
+
+### Presets — Proposal
+
+A preset is a name for a permission mode plus rules. User rules layer on top and
+a preset can never remove a user deny.
+
+| Preset | Mode | Rules |
+| --- | --- | --- |
+| `read-only` | `ask` | deny `capability:workspace_write`, `capability:process`, `capability:external`, `capability:network` |
+| `ask` (default) | `ask` | none |
+| `accept-edits` | `accept-edits` | none |
+| `bypass` | `bypass` | none |
+
+Selection, highest first: `--permissions <preset>` flag, `/permissions preset
+<name>` for the running session, `permissions.preset` in settings, then `ask`.
+
+Each preset has one table-driven test naming the calls it allows, asks about,
+and denies (criterion a7).
+
+### Settings schema — Proposal
+
+In `~/.propio/settings.json`, beside `runtime`:
+
+```json
+{
+  "permissions": {
+    "preset": "ask",
+    "allow": ["bash(npm run test:*)", "edit(src/**)"],
+    "ask": [],
+    "deny": ["read(~/.ssh/**)", "bash(git push:*)"]
+  }
+}
+```
+
+Validated with `zod` in the application's store implementation. An invalid file
+fails startup with the file and field. "Always allow" from the prompt appends to
+`allow` using the existing atomic JSON writer (`src/config/jsonFile.ts`), leaving
+other keys untouched.
+
+### Store
+
+```ts
+interface PermissionStore {
+  load(owner: OwnerScope): Promise<PermissionSettings>;
+  save(owner: OwnerScope, settings: PermissionSettings): Promise<void>;
+}
+```
+
+`OwnerScope` is an opaque string. The CLI passes a constant and maps it to the
+settings file. `policy` ships an in-memory implementation for tests and the
+server. A `PolicyEngine` is constructed with a store and an owner scope and
+holds its rules and session grants as instance state (criterion a12).
+
+### Approval request and answer — Proposal
+
+```ts
+interface ApprovalRequest {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly args: JsonObject;
+  readonly capabilities: readonly Capability[];
+  readonly reason: string;               // why it asked: rule text or mode default
+  readonly suggestions: readonly GrantSuggestion[];  // exact pattern, tool, capability/server
+}
+
+type ApprovalAnswer =
+  | { requestId: string; decision: "allow_once" }
+  | { requestId: string; decision: "allow_session"; rule: string }
+  | { requestId: string; decision: "allow_always"; rule: string }
+  | { requestId: string; decision: "deny"; reason?: string };
+```
+
+Both are plain JSON. The engine does not call the terminal. It returns
+`{ outcome: "ask", request }`; the application's `authorizeTool` implementation
+hands the request to an `ApprovalChannel` and awaits the answer:
+
+```ts
+interface ApprovalChannel {
+  request(request: ApprovalRequest, signal?: AbortSignal): Promise<ApprovalAnswer>;
+}
+```
+
+The interactive CLI supplies a channel backed by the prompt. Non-interactive
+runs supply one that answers `deny` immediately with reason "approval required;
+not available in non-interactive mode" (criterion a8). The a11 test supplies a
+channel that writes the serialized request to a child process and reads the
+answer back. `turn-steering` later replaces the channel with the
+answer-approval command; `tool-call-rendering` adds the display payload to the
+request.
+
+The resulting `AgentToolPolicyDecision` carries `actor: "user"` when an answer
+decided, `actor: "application"` when a rule or mode decided, and `rule` set to
+the rule text, `mode:<name>`, `session_grant:<rule>`, or `non_interactive`.
+
+The runtime's wait is already abortable. Escape during a prompt cancels the
+turn as it does today.
+
+### Session grants
+
+`allow_session` adds a rule to the engine's session set. The set is written
+into the session snapshot and restored on resume, and a new session starts
+empty (criterion a5). Grants are listed and revocable in `/permissions`.
+
+### Global-install prompt
+
+`classifyGlobalInstallCommand` stays. In the engine's `bash` evaluation a
+matched global install is treated as `ask` with the classifier's reason, unless
+an allow rule matches the command, and it asks in every mode except `bypass`.
+`BashTool.assertGlobalInstallAllowed` and the gate config are removed.
+`PROPIO_ALLOW_GLOBAL_INSTALLS=1` keeps working as a deprecated alias that adds
+a session allow for classified installs, with a warning.
+
+### `/permissions` command
+
+`/permissions` lists the preset, mode, rules by source, session grants, and the
+last decision with the rule that made it. Subcommands: `allow <rule>`,
+`ask <rule>`, `deny <rule>`, `remove <rule>`, `revoke <grant>`, `preset <name>`,
+`mode <name>`.
+
+## Slices
+
+One PR each, in order. Status lives in [delivery.json](delivery.json).
+
+| Slice | Content | Criteria |
+| --- | --- | --- |
+| `schema-validation` | Validation in the registry and MCP path; `invalid_arguments` status | a1 |
+| `policy-core` | `src/policy` and its subpath export: metadata, rules, modes, presets, engine, approval types, store interface, in-memory store. Tool metadata on built-ins and MCP. No behavior change in the CLI. | a7, a10, a12 |
+| `enforcement` | Engine wired into `authorizeTool`; approval channel; non-interactive denial; workspace confinement; session grants in the snapshot; global-install folding; trace actor. Interactive CLI uses a minimal prompt so the default can flip in this PR. | a2, a3, a5, a6, a8, a9, a11 |
+| `approval-ui` | Full prompt with grant choices, file-backed store, `/permissions`, `--permissions` flag, footer label, README | a2, a4, a5 |
+
+## Checks by risk
+
+| Risk area | Check |
+| --- | --- |
+| Rule matching | Table tests for each rule form; chained and substituted `bash` commands never match an allow; path traversal (`..`, symlinked parents) resolved before matching |
+| Precedence | Deny beats session grant, persisted allow, and every preset |
+| Async approval | Abort while waiting; channel throws (fails closed); answer for an unknown request id rejected |
+| Serialization | `JSON.parse(JSON.stringify(request))` deep-equals the request; answer supplied by a child process |
+| Isolation | Two engines, two owner scopes, one process; guarded-import test forbids `fs`, `process`, `net`, and application imports from `src/policy` |
+| Regression | Existing plan and discover mode tests pass unchanged |
+
+Repository checks for every slice: `npm test`, `npm run build`,
+`npm run format:check`, `npx fallow audit`.
+
+## Cross-repository changes
+
+| Repository | Change |
+|------------|--------|
+| propio-agent | All four slices. |
+
+## Risks and mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| Prompts become tedious and `bypass` becomes the habit | Read-only tools in the workspace never ask; session and persisted grants; `accept-edits`; grant suggestions offered on every prompt |
+| Default flips to `ask` and breaks existing non-interactive scripts | Denial message names the flag and rule that would allow it; changelog entry; open question 6 |
+| `bash` prefix rules approve more than intended | Allow rules refuse compound commands; documented as a guard, not a boundary |
+| Validation rejects calls that worked before because a schema is stricter than its tool | Run the existing suite and fixtures through validation in `schema-validation` and fix schemas there |
+| Prompt work collides with `tool-call-rendering` | The prompt renders from the approval request only; phase 3 swaps in the display payload |
+| `src/agent.ts` grows again | Wiring goes in a new application module that `Agent` calls, not into `Agent` itself |
+
+## Alternatives considered
+
+- **Enforce in the registry `approve` callback.** Rejected: MCP tools do not go
+  through that registry, and the callback returns a boolean with no rule or
+  actor for the trace.
+- **A prompt callback passed into the engine.** Rejected: it cannot be answered
+  from another process, which the session protocol and the server require.
+- **Structured rule objects in settings instead of strings.** Rejected for now:
+  harder to edit by hand and to type in `/permissions`. The parser produces a
+  structured form internally, so a second syntax can be added later.
+- **`zod` for argument validation.** Rejected: schemas arrive as JSON Schema,
+  including from MCP servers.

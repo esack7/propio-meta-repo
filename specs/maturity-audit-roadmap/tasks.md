@@ -13,7 +13,7 @@ specs listed in [design.md](design.md), each with its own delivery record.
 - [ ] Owner review of findings 2 and 3 (derived from code, not observed sessions).
 - [x] Package layout and second consumer decided (2026-11-11).
 - [x] Remaining open questions answered (2026-11-11).
-- [ ] Create the first follow-on spec (`tool-permissions`) with `create-spec`.
+- [x] Create the first follow-on spec (`tool-permissions`) with `create-spec`: [tool-permissions](../tool-permissions/requirements.md).
 
 ## Baseline checks (2026-11-11, Node 22.23.3)
 
