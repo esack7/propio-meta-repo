@@ -62,6 +62,14 @@ Schema, including arbitrary ones from MCP servers; `zod` would need a
 conversion layer. It is already in the install tree through the MCP SDK.
 Compiled validators are cached per registry instance, not at module level.
 
+Dialect (decided 2026-11-12, after review): `$schema` must name the 2020-12,
+2019-09, or draft-07 meta-schema; any other declared dialect makes the tool
+uncallable. A schema without `$schema` is read as 2020-12. For MCP tools that
+is final, as the MCP specification requires; other tools are retried as
+draft-07 if they do not compile as 2020-12. The owner of a tool supplies its
+check (`ExecutableTool.validateArguments`, `AgentToolExecutor.validateArguments`),
+so the runtime applies MCP rules to MCP tools before policy runs.
+
 ### Tool metadata
 
 ```ts
