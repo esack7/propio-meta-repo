@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "spec": "maturity-audit-roadmap",
+  "working_agreement": "Assessment and planning only: read both repositories, write the audit and roadmap in this spec directory, and change no repository code. Follow-on specs require their own authorization.",
+  "criteria": {},
+  "slices": []
+}

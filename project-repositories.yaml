@@ -43,3 +43,19 @@ repositories:
     selection:
       use_for: Provider adapters, provider-specific API behavior, shared streaming events, capabilities, retries, diagnostics, and reusable provider configuration
       avoid_for: CLI agent orchestration, built-in tools, MCP integration, sessions, terminal UX, and Docker sandbox behavior
+
+# Planned, not yet created. Optional: helpers ignore this block until it is
+# uncommented and given a real clone URL, so setup and refresh keep working.
+# See specs/maturity-audit-roadmap/design.md (chat-server-spike, chat-server).
+#
+#  - name: propio-server
+#    description: Backend server exposing the Propio session protocol over HTTP, with a web chat client and an MCP-only tool surface
+#    git:
+#      clone_url: <set when the repository exists>
+#      default_branch: main
+#    context:
+#      - AGENTS.md
+#      - README.md
+#    selection:
+#      use_for: HTTP transport for agent sessions, server-side stores, remote MCP use, and the web chat interface
+#      avoid_for: Reusable primitives, the CLI, terminal UX, local file and shell tools, and provider adapters
