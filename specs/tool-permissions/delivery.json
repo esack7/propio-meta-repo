@@ -28,7 +28,7 @@
       "branch": "codex/tool-permissions-schema-validation",
       "pr": 102,
       "evidence": {},
-      "note": "In review; four review findings addressed in feb3fb1. Checks at feb3fb14102849bc9593bc40da5b998fcb2da360: build, 117 suites / 1,766 tests, format check, fallow audit. a1 check: src/tools/__tests__/argumentValidation.test.ts (built-in sweep, registry, dialects), src/mcp/__tests__/boundary.test.ts (server not called), src/agent-core/__tests__/runtime.test.ts (validation before policy). Record evidence and mark verified after merge.",
+      "note": "In review; five review findings addressed in feb3fb1 and 2ea1efb. Checks at 2ea1efb365df699873f17635048d80864e2f5d0f: build, 117 suites / 1,778 tests, format check, fallow audit. a1 check: src/tools/__tests__/argumentValidation.test.ts (built-in sweep, registry, dialects), src/mcp/__tests__/boundary.test.ts (server not called), src/agent-core/__tests__/runtime.test.ts (validation before policy). Record evidence and mark verified after merge.",
       "start_order": 1
     },
     {
