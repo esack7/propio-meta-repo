@@ -1,7 +1,7 @@
 {
   "version": 1,
   "spec": "tool-permissions",
-  "working_agreement": "Requested 2026-11-12: set up and start implementing. Design decisions were agreed on 2026-11-12. Implement the planned slices in order and fix in-scope findings. Ask before pushing, opening PRs, merging, or publishing.",
+  "working_agreement": "Requested 2026-11-12: set up and start implementing. Design decisions were agreed on 2026-11-12. Implement the planned slices in order and fix in-scope review findings. Standing approval from 2026-11-12 for the remaining slices: commit each slice, push its branch, and open its pull request without asking again. Ask before merging or publishing.",
   "criteria": {
     "a1": "No tool implementation is reachable with schema-invalid arguments",
     "a2": "In ask mode write, edit, bash, and MCP calls prompt before executing; read, grep, find, and ls inside the workspace do not",
@@ -47,11 +47,12 @@
         "a10",
         "a12"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
+      "status": "review",
+      "branch": "codex/tool-permissions-policy-core",
+      "pr": 103,
       "evidence": {},
-      "note": "src/policy and its subpath export, tool metadata, in-memory store. No CLI behavior change."
+      "note": "In review. Checks at 51f4033fe2372cbf8a65d7f8271bec79af645d54: build, 121 suites / 1,921 tests, format check, fallow audit, example:policy. a7: src/policy/__tests__/engine.test.ts (preset table). a10: src/policy/__tests__/boundary.test.ts. a12: src/policy/__tests__/engine.test.ts (owner scopes). Differences from the agreed design, stated in the PR: lone & and redirections also block a bash allow rule; a ~/ rule requires a home directory; request ids are UUIDs; POSIX paths only. Record evidence and mark verified after merge.",
+      "start_order": 2
     },
     {
       "id": "enforcement",
