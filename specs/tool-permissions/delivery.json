@@ -28,7 +28,7 @@
       "branch": "codex/tool-permissions-schema-validation",
       "pr": 102,
       "evidence": {},
-      "note": "In review; five review findings addressed in feb3fb1 and 2ea1efb; strict MCP dialect default (owner decision 2026-11-12) in e0a1065. Checks at e0a1065ae0a7b4c83e539e60d530aed1b109cf04: build, 117 suites / 1,785 tests, format check, fallow audit. a1 check: src/tools/__tests__/argumentValidation.test.ts (built-in sweep, registry, dialects, tool-owned checks), src/mcp/__tests__/boundary.test.ts (server not called, strict 2020-12), src/agent-core/__tests__/runtime.test.ts (validation before policy). Record evidence and mark verified after merge.",
+      "note": "In review. Review findings addressed in feb3fb1, 2ea1efb, and 1032f5c; strict MCP dialect default (owner decision 2026-11-12) in e0a1065. Checks at 1032f5c617f6cd3f096497194539ae5d86158554: build, 117 suites / 1,787 tests, format check, fallow audit. src/auth/openai/__tests__/storage.test.ts (OS process lock) failed in 2 of 3 isolated runs; unrelated to this slice. a1 check: src/tools/__tests__/argumentValidation.test.ts (built-in sweep, registry, dialects, tool-owned checks), src/mcp/__tests__/boundary.test.ts and tool.test.ts (server not called, strict 2020-12, schema check kept without an MCP check), src/agent-core/__tests__/runtime.test.ts (validation before policy, throwing check). Record evidence and mark verified after merge.",
       "start_order": 1
     },
     {
