@@ -461,6 +461,20 @@ Where this list and the proposals above disagree, this list is current.
   shown as `BYPASS`.
 - **Non-interactive denial** names the narrowest rule that would allow the
   call and the settings file, as well as `--permissions`.
+- **Review of #105.** In sandbox mode the store reads
+  `/app/.propio/settings.json`, the read-only copy the wrapper mounts, and
+  refuses to save (`resolveSettingsLocation`). Saving is offered only where
+  `savingUnavailableReason()` is undefined: not in the sandbox, and not
+  without the optional `os-lock`. The Dockerfile's build stage builds
+  `os-lock` (toolchain plus `-Wno-error=incompatible-pointer-types`) and
+  fails if it cannot be loaded. The settings file is replaced with mode
+  `0600` or stricter. `PolicyEngine.answer` and `PermissionStore.update` take
+  a `signal`; the store checks it inside the lock as it commits. An explicit
+  `"permissions": null` is an error. The non-interactive denial for a matched
+  ask rule names that rule instead of suggesting an allow rule or preset.
+- **Not changed.** `runtimeConfig` still reads `runtime` settings from the
+  container's home in sandbox mode, so those are ignored there; only
+  permissions read the mounted file. That predates this spec.
 - **Not done.** Rules are user-wide (project settings are phase 10). If the
   settings file becomes unusable between turns, the turn fails with the right
   message under the provider's error heading.

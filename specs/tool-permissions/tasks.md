@@ -21,9 +21,10 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 - `schema-validation` (a1), `policy-core` (a7, a10, a12), and `enforcement`
   (a2, a3, a5, a6, a8, a9, a11) are merged and verified: propio-agent#102,
   #103, and #104.
-- `approval-ui` (a2, a4, a5) is one signed commit, `8015e55`, on
-  `codex/tool-permissions-approval-ui`, pushed, based on `origin/main` at
-  `cfd0045`. CI passed. Evidence is in [delivery.json](delivery.json). Next:
+- `approval-ui` (a2, a4, a5) is `8015e55` plus review fixes `704bd92`, both
+  signed, on `codex/tool-permissions-approval-ui`, pushed, based on
+  `origin/main` at `cfd0045`. All six review findings are fixed and CI
+  passed; replies to the inline comments are not posted. Evidence is in [delivery.json](delivery.json). Next:
   review comments, then the owner's decision to merge. After it merges, mark
   it verified; every criterion is then covered and the spec can be closed
   with `close-spec`.
@@ -31,6 +32,8 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
   this machine during `enforcement` and passes alone; no MCP code changed.
   Treat it like the OpenAI storage test: rerun before calling it a
   regression.
+- Docker on this machine shares the home directory but not `/tmp`; mount
+  test directories from under `$HOME`.
 - To try the CLI without a real model, point `OLLAMA_HOST` at a local server
   that answers `/api/chat` with a tool call. The provider reads `OLLAMA_HOST`
   before the configured host.
