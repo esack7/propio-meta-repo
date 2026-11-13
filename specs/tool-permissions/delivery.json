@@ -129,7 +129,7 @@
         "a4",
         "a5"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/tool-permissions-approval-ui",
       "pr": 105,
       "evidence": {
@@ -146,7 +146,7 @@
           "check": "src/__tests__/agentPermissions.test.ts 'a session grant chosen at the prompt stops further prompts and is saved with the session': s then a grant at the CLI's prompt, a second turn with no prompt (rule session_grant:write), sessionGrants in the exported session. Restore on resume and absence in a new session are covered by enforcement's a5 evidence. npm test passed (133 suites, 2,380 tests); build, format check, fallow audit, example:policy passed locally; CI passed on d5c8275."
         }
       },
-      "note": "In review as propio-agent#105, opened 2026-11-12. File-backed store, full prompt with grants, /permissions, footer label, README. Review round 1 (six findings) fixed in 704bd92; round 2 (absolute host-path rules across the sandbox mount, symlinked settings) in f3ae860, round 3 (the mounted config copy, credential locations for linked settings) in d5c8275. Replies to the review comments not posted. Run by hand in a pseudo-terminal against a local stand-in for the model server, in the built sandbox image, and through bin/propio-sandbox; not run against a real provider. Details in design.md under 'As implemented in approval-ui'.",
+      "note": "Merged 2026-11-13 as propio-agent#105 (merge commit 0d24312e165868b6d32743825aceb3548aad9b70) after three review rounds (ten findings). File-backed store, full prompt with grants, /permissions, footer label, README. Replies to the review comments not posted. Run by hand in a pseudo-terminal against a local stand-in for the model server, in the built sandbox image, and through bin/propio-sandbox; not run against a real provider. Details in design.md under 'As implemented in approval-ui'.",
       "start_order": 4
     }
   ]
