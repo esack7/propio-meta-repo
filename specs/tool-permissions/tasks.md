@@ -20,10 +20,12 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 - `schema-validation` (a1) and `policy-core` (a7, a10, a12) are merged and
   verified: propio-agent#102 and #103.
-- `enforcement` (a2, a3, a5, a6, a8, a9, a11) is one signed commit, `1a0325e`,
-  on `codex/tool-permissions-enforcement`, pushed, based on `origin/main` at
-  `3014b8c`. Evidence is in [delivery.json](delivery.json). Next: review
-  comments and CI, then the owner's decision to merge.
+- `enforcement` (a2, a3, a5, a6, a8, a9, a11) is on
+  `codex/tool-permissions-enforcement`, based on `origin/main` at `3014b8c`:
+  `1a0325e` plus review fixes `503fab0`, both signed and pushed. All five
+  review findings are fixed and CI passed; replies to the inline comments
+  are not posted. Evidence is in [delivery.json](delivery.json). Next: the
+  owner's decision to merge.
 - `approval-ui` (a2, a4, a5) is planned. Read [design.md](design.md) "As
   implemented in `enforcement`" and "Notes for approval-ui" first.
 - This machine did not have the merged slice branches. They were restored
