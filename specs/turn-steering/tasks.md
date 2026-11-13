@@ -32,6 +32,14 @@ questions" in [requirements.md](requirements.md); expect corrections in review.
 comments arrive as inline PR comments; each review fix adds a test that fails
 with the fix reverted.
 
+**CI on #106.** The first run failed on Node 24.10 in
+`src/ui/__tests__/chatPromptSession.test.ts` ("pastes an image file path into
+a pill"), which waits a fixed 150 ms for a file read; Node 20 passed. The
+rerun of that job passed with no change. The test is outside this spec and
+passes locally. It has not failed on the last five `main` runs, so if it
+fails again on this branch, check whether the new real-process tests are
+slowing the runner before calling it a flake.
+
 ## Baseline checks (2026-11-13, Node 24.11.0)
 
 Run in `specs/turn-steering/repos/propio-agent` at
