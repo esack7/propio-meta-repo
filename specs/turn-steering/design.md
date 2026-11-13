@@ -239,21 +239,21 @@ interface structurally.
 
 Where this list and "Approach" disagree, this list is current.
 
-- **Guidance starts a new turn record.** The conversation store holds one
-  user message per turn (`TurnEntry` is `assistant` or `tool`). A third entry
-  kind would change the saved-session format (`src/context/codec.ts` rejects
-  unknown kinds) and the recovery journal. Instead the runtime calls
-  `beginUserTurn` for each guidance message, which is what a message sent
-  after an Escape already does. There is no `appendOperatorGuidance`.
-  - The turn that guidance cut short has no final answer, so it stays
-    incomplete and is not eligible for the rolling summary. Interrupted turns
-    already behave this way.
-  - Tool results that finished just before the guidance are sent as stored
-    summaries (`toolResultSummaryMaxChars`, 1,500 by default) one request
-    earlier than otherwise, because only the current turn's last batch is
-    sent in full.
-  - The trace `turnId` changes at each guidance message; the turn operation
-    id does not.
+- **Guidance is an entry in the current turn.** `TurnEntry` gains a third
+  kind, `guidance`, whose message has role `user`; the runtime adds it with
+  `AgentContextStore.appendOperatorGuidance`. Guidance after a final answer
+  reopens that turn (clears `completedAt`). The task, its tool exchange, and
+  its guidance stay together as the protected current turn in prompt
+  selection, including the minimal recovery prompt, and a turn holding
+  guidance is never removed as empty on cancellation.
+  - The codec accepts the kind; the recovery journal records it as
+    `guidance_added` with a `reopened` flag. The session version stays 4.
+    Sessions and journals containing guidance cannot be read by earlier
+    versions, which reject the unknown kind.
+  - The first version of this slice started a new turn record per message to
+    avoid the format change. Review of #107 showed that lets prompt
+    selection drop the task, and lets an interrupt remove delivered
+    guidance. Both tests now fail against that approach.
 - **No interrupted-step note.** An interrupted batch says so in its results;
   an interrupted model step leaves nothing in context to explain.
 - **Result wording is neutral** ("Interrupted before this call finished"),

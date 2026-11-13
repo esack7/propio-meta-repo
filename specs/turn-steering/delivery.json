@@ -48,19 +48,19 @@
       "pr": 107,
       "evidence": {
         "a1": {
-          "commit": "31f94bdfd6285277da4dc23a7d2faad08c26858c",
-          "check": "src/agent-core/__tests__/steering.test.ts 'operator guidance (a1)': three messages queued across two iterations appear in the fake provider's requests in order, each before the next request; guidance during the final answer produces one more request containing it; an empty queue ends the turn. src/__tests__/agentSteering.test.ts: the same through Agent and across a saved session. src/__tests__/providerGuidanceShape.test.ts: all ten adapters build a request from such a history. Terminal delivery is steering-ui. npm test passed (138 suites, 2,443 tests); build, format check, fallow audit passed locally."
+          "commit": "cdb3bafe910ebde023df472a1d92a53b59923b3c",
+          "check": "src/agent-core/__tests__/steering.test.ts: three messages queued across two iterations appear in the fake provider's requests in order, each before the next request; guidance during the final answer reopens the turn and produces one more request; under budget pressure (4,096-token window, 7.3K-char task, 1.8K-char result) and in the minimal recovery prompt the task and guidance stay together. src/__tests__/agentSteering.test.ts: the same through Agent and across a saved session. src/__tests__/providerGuidanceShape.test.ts: all ten adapters build a request from such a history. Terminal delivery is steering-ui. npm test passed (138 suites, 2,451 tests); build, format check, fallow audit passed locally."
         },
         "a2": {
-          "commit": "31f94bdfd6285277da4dc23a7d2faad08c26858c",
-          "check": "src/agent-core/__tests__/steering.test.ts 'interrupting a turn (a2)': abort during the second of three calls keeps the first result, records the second and third as interrupted and not run, ignores the late result, and the next request has exactly one result per tool call with no tool executed again; also abort while awaiting approval, during a model step, and before any entry. src/__tests__/agentSteering.test.ts: the same through Agent, in the same session and in a saved one loaded into a fresh agent. npm test passed (138 suites, 2,443 tests); build, format check, fallow audit passed locally."
+          "commit": "cdb3bafe910ebde023df472a1d92a53b59923b3c",
+          "check": "src/agent-core/__tests__/steering.test.ts: abort during the second of three calls keeps the first result, records the second and third as interrupted and not run, ignores the late result, and the next request has exactly one result per tool call with nothing executed again; also abort while awaiting approval, during a model step, during the step after guidance was delivered (both messages kept), and before any entry. src/__tests__/agentSteering.test.ts: the same through Agent, in the same session and in a saved one. src/sessions/__tests__/recoveryJournalState.test.ts: the journal reproduces guidance entries and a reopened turn. npm test passed (138 suites, 2,451 tests); build, format check, fallow audit passed locally."
         },
         "a8": {
-          "commit": "31f94bdfd6285277da4dc23a7d2faad08c26858c",
-          "check": "src/agent-core/__tests__/steering.test.ts 'steering in the trace (a8)': each delivered message is an operator_guidance record with actor user, id, iteration, and length, recorded before the request it precedes, text only at full capture; turn_cancelled records actor user for interrupt, escape, and sigint, and application otherwise, with phase and interrupted call ids. npm test passed (138 suites, 2,443 tests); build, format check, fallow audit passed locally."
+          "commit": "cdb3bafe910ebde023df472a1d92a53b59923b3c",
+          "check": "src/agent-core/__tests__/steering.test.ts 'steering in the trace (a8)': each delivered message is an operator_guidance record with actor user, id, iteration, and length, recorded before the request it precedes, text only at full capture; turn_cancelled records actor user for interrupt, escape, and sigint, and application otherwise, with phase and interrupted call ids. npm test passed (138 suites, 2,451 tests); build, format check, fallow audit passed locally."
         }
       },
-      "note": "In review as propio-agent#107. Departures from the design, listed in design.md: guidance starts a new turn record instead of a new entry kind (no saved-session format change); no interrupted-step note; turn_cancelled is enriched instead of adding turn_interrupted.",
+      "note": "In review as propio-agent#107. Review round 1 (two P2: task dropped by prompt selection, delivered guidance removed on interrupt) fixed in cdb3baf by storing guidance as a guidance entry inside the current turn, as the design first proposed. Sessions with guidance cannot be read by earlier versions.",
       "start_order": 2
     },
     {
