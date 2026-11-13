@@ -432,6 +432,39 @@ section "Tool permissions".
 - The non-interactive denial message names `--permissions` only; add the
   settings rule once the file store exists.
 
+## As implemented in `approval-ui`
+
+Where this list and the proposals above disagree, this list is current.
+
+- **Store.** `FilePermissionStore` (`src/config/permissionStore.ts`) serves one
+  owner from the `permissions` object of `~/.propio/settings.json`. `update`
+  holds an operating-system lock on `settings.json.lock`
+  (`src/config/fileLock.ts`, `os-lock`), reads inside it, and writes with the
+  existing atomic JSON writer, leaving other keys untouched. The lock file is
+  never removed.
+- **Validation.** The store checks shape with `zod` (unknown keys under
+  `permissions` are errors) and also parses each rule and checks the preset,
+  so an error names the file and field (`permissions.deny.1: ...`). The CLI
+  loads rules at startup and exits on an unusable file.
+- **Prompt.** `askOperator` (`src/ui/approvalPrompt.ts`): `y` once, `s`
+  session, `a` always, `n` deny with an optional reason; `s` and `a` list
+  `request.suggestions` to choose from. Only an explicit choice allows. It
+  reads through `readLineFromKeys` (`src/ui/keyLineReader.ts`), which echoes
+  and edits a line a key at a time, because the terminal is in raw mode while
+  a turn runs. It does not go through the prompt composer.
+- **`/permissions`** (`src/ui/permissionsCommand.ts`) uses
+  `ToolPermissions.overview()`, `addRule`, `removeRule`, `revokeSessionGrant`,
+  `setPreset`, and `setMode`; the agent exposes them as `agent.permissions`.
+  `preset` and `mode` last for the session and are not stored. Edits record a
+  `permissions_changed` configuration change in the trace.
+- **Footer.** The permission mode is shown when it is not `ask`; bypass is
+  shown as `BYPASS`.
+- **Non-interactive denial** names the narrowest rule that would allow the
+  call and the settings file, as well as `--permissions`.
+- **Not done.** Rules are user-wide (project settings are phase 10). If the
+  settings file becomes unusable between turns, the turn fails with the right
+  message under the provider's error heading.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).

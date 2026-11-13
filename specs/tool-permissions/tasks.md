@@ -14,21 +14,26 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-12, second machine)
 
-`enforcement` merged as propio-agent#104; `approval-ui` is next.
+`approval-ui`, the last slice, is in review as propio-agent#105.
 
 **State**
 
 - `schema-validation` (a1), `policy-core` (a7, a10, a12), and `enforcement`
   (a2, a3, a5, a6, a8, a9, a11) are merged and verified: propio-agent#102,
-  #103, and #104. Evidence is in [delivery.json](delivery.json).
+  #103, and #104.
+- `approval-ui` (a2, a4, a5) is one signed commit, `8015e55`, on
+  `codex/tool-permissions-approval-ui`, pushed, based on `origin/main` at
+  `cfd0045`. CI passed. Evidence is in [delivery.json](delivery.json). Next:
+  review comments, then the owner's decision to merge. After it merges, mark
+  it verified; every criterion is then covered and the spec can be closed
+  with `close-spec`.
 - `src/mcp/__tests__/boundary.test.ts` failed in 2 of 10 local full runs on
-  this machine and passes alone; no MCP code changed. Treat it like the
-  OpenAI storage test: rerun before calling it a regression.
-- `approval-ui` (a2, a4, a5) is planned. Read [design.md](design.md) "As
-  implemented in `enforcement`" and "Notes for approval-ui" first.
-- This machine did not have the merged slice branches. They were restored
-  from GitHub's `refs/pull/102/head` and `refs/pull/103/head`, which match the
-  recorded evidence commits, with the owner's approval.
+  this machine during `enforcement` and passes alone; no MCP code changed.
+  Treat it like the OpenAI storage test: rerun before calling it a
+  regression.
+- To try the CLI without a real model, point `OLLAMA_HOST` at a local server
+  that answers `/api/chat` with a tool call. The provider reads `OLLAMA_HOST`
+  before the configured host.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; for the remaining slices,
