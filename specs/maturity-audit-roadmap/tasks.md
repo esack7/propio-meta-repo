@@ -39,10 +39,11 @@ and note which behaviors are the most disruptive.
 
 ## Starting the next session
 
-**Current (2026-11-13):** phase 1, `tool-permissions`, is under way: two of
-its four slices are merged. Resume from
-[tool-permissions/tasks.md](../tool-permissions/tasks.md), section
-"Resuming". The steps below describe how that spec was started.
+**Current (2026-11-13):** phase 1, `tool-permissions`, is complete: all four
+slices are merged (propio-agent#102–#105), every criterion is verified, and its
+worktree is closed. Next is a spec for phase 2 (`turn-steering`) or another
+phase whose dependencies are met; none has been created yet. The steps below
+describe how phase 1 was started.
 
 1. Read [audit.md](audit.md), then [design.md](design.md). Decisions are in
    [requirements.md](requirements.md) and are settled; do not reopen them.
