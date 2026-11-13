@@ -411,7 +411,9 @@ section "Tool permissions".
   must be on an allowlist (the subcommand, `-g`, `--global`,
   `--location=global`, `--location global`, `--`, packages), because npm's
   parser takes separate boolean values, stops at `--`, and expands
-  abbreviations. The broader classifier still
+  abbreviations. The command must also be plain literal words (no quoting,
+  escapes, expansions, or other shell syntax), since the heuristic tokenizer
+  does not split words the way the shell does. The broader classifier still
   supplies the prompt's reason. The PR is marked breaking (`!` and a
   `BREAKING CHANGE:` footer), which makes the squash commit a major release.
 - **Tests.** `createTestAgent` and the direct constructions in
