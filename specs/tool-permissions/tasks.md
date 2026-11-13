@@ -21,10 +21,10 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 - `schema-validation` (a1), `policy-core` (a7, a10, a12), and `enforcement`
   (a2, a3, a5, a6, a8, a9, a11) are merged and verified: propio-agent#102,
   #103, and #104.
-- `approval-ui` (a2, a4, a5) is `8015e55` plus two rounds of review fixes
-  (`704bd92`, `f3ae860`), all signed, on `codex/tool-permissions-approval-ui`,
-  pushed, based on `origin/main` at `cfd0045`. All eight review findings are
-  fixed and CI passed; replies to the inline comments are not posted. Evidence is in [delivery.json](delivery.json). Next:
+- `approval-ui` (a2, a4, a5) is `8015e55` plus three rounds of review fixes
+  (`704bd92`, `f3ae860`, `d5c8275`), all signed, on
+  `codex/tool-permissions-approval-ui`, pushed, based on `origin/main` at
+  `cfd0045`. All ten review findings are fixed and CI passed; replies to the inline comments are not posted. Evidence is in [delivery.json](delivery.json). Next:
   review comments, then the owner's decision to merge. After it merges, mark
   it verified; every criterion is then covered and the spec can be closed
   with `close-spec`.

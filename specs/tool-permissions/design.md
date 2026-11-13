@@ -479,9 +479,13 @@ Where this list and the proposals above disagree, this list is current.
   its host path before matching (`src/permissions/sandboxPaths.ts`). Rules
   are never rewritten. Without those variables, a deny or ask rule on a file
   tool with an absolute or `~/` pattern stops the run.
+  The translator takes a list of mounts (`sandboxMounts`): the project, and
+  `/app/.propio` as the host's `~/.propio` (third review of #105).
 - **Symlinked settings.** The store follows a `settings.json` link for reads,
-  writes, and the lock; `createSandboxConfigView` copies a linked settings
-  file's contents in if they are a JSON object and fails otherwise. Other
+  writes, and the lock. `createSandboxConfigView` follows a linked settings
+  file only if its physical target is outside every credential location
+  (`EXCLUDED_CONFIG_PARTS` and `defaultOpenAiSecretDirectory()`), and copies
+  only its `permissions` object; anything else stops the sandbox. Other
   links stay out of the view. `withFileLock` canonicalizes its path.
 - **Not changed.** `runtimeConfig` still reads `runtime` settings from the
   container's home in sandbox mode, so those are ignored there; only
