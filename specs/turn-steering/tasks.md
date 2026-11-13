@@ -14,11 +14,10 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-13)
 
-`process-group` (a3) is in review as propio-agent#106; review round 1 (two
-findings) is fixed in `329ab03` and CI passes. Next, once it is
-merged: `runtime-steering`, then `session-commands`, then `steering-ui`; see
-"Slices" in [design.md](design.md). `start-slice` refuses the next slice
-until #106 is merged.
+`process-group` (a3) is merged and verified: propio-agent#106 (merge commit
+`c33a73f`). `runtime-steering` (a1, a2, a8) is in progress. Then
+`session-commands`, then `steering-ui`; see "Slices" in
+[design.md](design.md).
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
