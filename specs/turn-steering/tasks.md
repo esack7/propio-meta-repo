@@ -14,7 +14,8 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-13)
 
-`process-group` (a3) is in review as propio-agent#106. Next, once it is
+`process-group` (a3) is in review as propio-agent#106; review round 1 (two
+findings) is fixed in `329ab03` and CI passes. Next, once it is
 merged: `runtime-steering`, then `session-commands`, then `steering-ui`; see
 "Slices" in [design.md](design.md). `start-slice` refuses the next slice
 until #106 is merged.

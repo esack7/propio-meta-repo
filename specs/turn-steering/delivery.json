@@ -25,11 +25,11 @@
       "pr": 106,
       "evidence": {
         "a3": {
-          "commit": "578b41b40adb1a1bfe99da6d8053ba673376ab11",
-          "check": "src/tools/__tests__/processGroup.test.ts (real processes): a background child of the shell is gone after cancel, timeout, and the output cap; a child that ignores SIGTERM is gone after the grace period; the same through BashTool with classification cancelled. Five of the six fail with detached turned off. src/tools/__tests__/runShellCommand.test.ts: spawn options and SIGKILL only while the command is open. npm test passed (134 suites, 2,388 tests); build, format check, fallow audit passed locally."
+          "commit": "329ab037222090eb13c636118a50a147e3af3ed0",
+          "check": "src/tools/__tests__/processGroup.test.ts (real processes): a background child is gone after cancel, timeout, and the output cap; a SIGTERM-ignoring child with redirected output is dead when the result arrives, for each of the three (fail when tracking stops at stdio close); a child holding the pipes is killed after the grace period; the same through BashTool. src/tools/__tests__/runShellCommand.test.ts: SIGKILL sent while the group has members after the shell closed, and never to a group that empties in time. src/cli/__tests__/exit.test.ts (subprocess, real SIGINT, abort-state controller, BashTool): the child is dead when the CLI exits 130; a SIGTERM-handling child finishes its cleanup first (fails without the drain); a second Ctrl+C exits at once; an exit that skips the drain still kills it (fails without the exit handler). npm test passed (135 suites, 2,395 tests); build, format check, fallow audit passed locally; CI passed on the first run."
         }
       },
-      "note": "In review as propio-agent#106. Only the cancellable (spawn) path is grouped; a call without an abort signal still uses execFile. Review points raised in the PR: no controlling terminal for a grouped command, and Ctrl+C reaching the command through the abort handler instead of the terminal.",
+      "note": "In review as propio-agent#106. Review round 1 (two P1 findings: escalation lost when a descendant redirects its output; escalation lost at CLI exit) fixed in 329ab03. Only the cancellable (spawn) path is grouped; a call without an abort signal still uses execFile. The live-group registry is process-level state in src/tools/processGroups.ts, documented as moving with local shell execution in tools-hardening.",
       "start_order": 1
     },
     {

@@ -212,6 +212,28 @@ interface structurally.
 - A grouped command is in a new session and has no controlling terminal.
   Terminal `SIGINT` reaches it through the CLI's abort handler, not directly.
 - The grace period is a module constant; `killGraceMs` exists for tests.
+- **Review of #106.** Termination is tracked per group in
+  `src/tools/processGroups.ts` until `kill(-pgid, 0)` reports no members, not
+  until the shell's output closes; a terminated command's result waits for
+  that. If `SIGKILL` has not emptied the group after another second, the
+  result is reported anyway.
+- **Exit.** The entrypoint awaits `exitAfterShellCleanup` (`src/cli/exit.ts`),
+  which runs the same sequence on every tracked group before
+  `process.exit`. A second Ctrl+C while waiting sends `SIGKILL` and exits.
+  An `exit` handler sends `SIGKILL` to any group still tracked when the
+  process leaves another way. Exit is delayed by up to the grace period
+  only when a command ignores `SIGTERM`.
+- **Process-level state, knowingly.** The registry of live groups is module
+  state, against the roadmap's rule for primitives. A process group belongs
+  to the process that created it, and the exit cleanup has to be
+  process-wide. Injecting a tracker would have meant threading it through
+  `Agent`, the tool manifest, and `!` commands in this slice. It moves with
+  local shell execution in `tools-hardening` (phase 11), and `session-commands`
+  (a7) does not cover `src/tools`.
+- **Not covered.** A signal that kills the CLI outright (`SIGKILL`, or
+  `SIGTERM` with no handler) runs no cleanup. Neither did the code before
+  this slice, but before it the commands were in the terminal's process
+  group.
 
 ## Slices
 
