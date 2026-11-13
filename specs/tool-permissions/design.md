@@ -407,8 +407,11 @@ section "Tool permissions".
   in the approval question and in tool-call lines at the `TerminalUi`
   boundary. The deprecated install setting covers only what
   `isUnambiguousGlobalInstall` recognizes: one command, no wrapper, whose
-  subcommand is the manager's own install, and for npm and pnpm only when
-  every scope option says global. The broader classifier still
+  subcommand is the manager's own install. For npm and pnpm every argument
+  must be on an allowlist (the subcommand, `-g`, `--global`,
+  `--location=global`, `--location global`, `--`, packages), because npm's
+  parser takes separate boolean values, stops at `--`, and expands
+  abbreviations. The broader classifier still
   supplies the prompt's reason. The PR is marked breaking (`!` and a
   `BREAKING CHANGE:` footer), which makes the squash commit a major release.
 - **Tests.** `createTestAgent` and the direct constructions in
