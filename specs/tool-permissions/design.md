@@ -193,11 +193,19 @@ other keys untouched.
 ### Store
 
 ```ts
+type PermissionSettingsChange = (current: PermissionSettings) => PermissionSettings;
+
 interface PermissionStore {
+  /** The settings as of the latest completed update. */
   load(owner: OwnerScope): Promise<PermissionSettings>;
-  save(owner: OwnerScope, settings: PermissionSettings): Promise<void>;
+  /** Apply a pure change to the current stored settings atomically. */
+  update(owner: OwnerScope, change: PermissionSettingsChange): Promise<PermissionSettings>;
 }
 ```
+
+The original proposal had `save(owner, settings)`. Review of `policy-core`
+replaced it: whole-snapshot saves let concurrent edits, from one engine or
+several, drop each other's deny rules.
 
 `OwnerScope` is an opaque string. The CLI passes a constant and maps it to the
 settings file. `policy` ships an in-memory implementation for tests and the
@@ -272,7 +280,77 @@ last decision with the rule that made it. Subcommands: `allow <rule>`,
 `ask <rule>`, `deny <rule>`, `remove <rule>`, `revoke <grant>`, `preset <name>`,
 `mode <name>`.
 
-## Slices
+## As implemented in `policy-core`
+
+Merged 2026-11-13 as propio-agent#103. Three review rounds changed or added
+the following; where this list and the proposals above disagree, this list is
+current. The code is in `src/policy/` and the README section "Reusable policy
+API (provisional)".
+
+- **Store:** `update(owner, change)` replaces `save` (see "Store"). An engine
+  runs its own store reads and writes one at a time and adopts each result
+  before the next starts, so a slow read cannot undo a later write. Engines
+  cache settings; `reload()` reads again.
+- **Answers:** `answer()` claims the request before anything is awaited and
+  reopens it if the answer fails, so only the first answer counts. Allow
+  answers re-read the stored rules and are refused (outcome `deny`, actor
+  `application`) when a deny added while the request waited now matches. An
+  always-allow grant is never written over a matching deny and never moves a
+  rule out of `deny`; it is removed from `ask`.
+- **Exact grants:** exact path grants are absolute and glob-escaped (braces
+  included), so they cover one file and do not follow the owner into another
+  workspace. No exact grant is offered for a compound command or one ending in
+  `:*`. Exact command grants match the command text regardless of `cwd` or
+  `env` (open question 1 in requirements.md).
+- **Paths:** the workspace root and home directory are matched literally;
+  patterns never negate. A `~/` rule fails the load when no home directory was
+  supplied. Paths are POSIX only.
+- **Compound commands:** besides the operators listed under "Rule syntax", a
+  lone `&` and the redirections `<` and `>` keep an allow rule from matching.
+- **Approval request:** `sessionId` and `toolCallId` are optional; the request
+  also carries `target` and `rule`. Ids default to random UUIDs, so an answer
+  for one engine never matches a request raised by another.
+- **Targets:** policy never inspects arguments by tool name. The caller passes
+  a `PolicyTarget`: `{ kind: "path", path }` (absolute, normalized, symbolic
+  links resolved), `{ kind: "command", command }`, or `{ kind: "mcp",
+  serverPrefix }`.
+- **Presets** are deep-frozen. **Tool metadata** is `ExecutableTool.metadata`;
+  `ToolRegistry.getToolMetadata(name)` resolves undeclared tools, including
+  MCP tools, to `external`, not read-only, not concurrency-safe. `src/mcp`
+  does not import `policy`.
+- **Dialect rules from `schema-validation`** are under "Schema validation".
+
+## Notes for enforcement
+
+Things the next slice must handle that the proposals above do not spell out:
+
+- **Where the pieces live.** `ApprovalChannel`, the `authorizeTool`
+  implementation, and the mapping from tool arguments to a `PolicyTarget` are
+  application code, not `policy`. Keep the wiring in a new module that `Agent`
+  calls, not in `src/agent.ts` itself.
+- **Targets.** File tools: resolve the path the way the tool will
+  (`resolveToolPath`), then resolve symbolic links (including for a file that
+  does not exist yet, via its parent) before passing it. `bash`: the command
+  text, plus whatever open question 1 decides about `cwd` and `env`. MCP: the
+  `mcp__<server>` prefix; `src/mcp/toolName.ts` builds the names.
+- **Global installs.** The engine knows nothing about them. The application
+  calls `classifyGlobalInstallCommand` and turns an `allow` whose `source` is
+  `mode` (no explicit rule) into an `ask` with the classifier's reason, except
+  in `bypass`. Then remove `BashTool.assertGlobalInstallAllowed` and keep
+  `PROPIO_ALLOW_GLOBAL_INSTALLS=1` as a deprecated session grant.
+- **Cache freshness.** `evaluate()` uses the engine's cached rules. Decide
+  when to `reload()`; once per turn is the simplest. Answers already reload.
+- **Plan and discover.** Their existing checks run first; classifier-approved
+  read-only `bash` and writes to the approved plan file are allowed with rule
+  `agent_mode:<mode>` without consulting policy (see "Modes").
+- **Order in the runtime.** Tool scope, then argument validation, then
+  `authorizeTool`, which is where policy runs (`src/agent-core/runtime.ts`).
+- **Session grants** go into the session snapshot via `listSessionGrants()`
+  and come back with `restoreSessionGrants()` on resume.
+- **File store (for `approval-ui`).** `update` must be atomic across processes
+  (lock file plus the existing atomic JSON writer), and `load` must return the
+  latest completed update.
+
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).
 

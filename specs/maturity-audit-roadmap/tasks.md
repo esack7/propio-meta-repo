@@ -39,6 +39,11 @@ and note which behaviors are the most disruptive.
 
 ## Starting the next session
 
+**Current (2026-11-13):** phase 1, `tool-permissions`, is under way: two of
+its four slices are merged. Resume from
+[tool-permissions/tasks.md](../tool-permissions/tasks.md), section
+"Resuming". The steps below describe how that spec was started.
+
 1. Read [audit.md](audit.md), then [design.md](design.md). Decisions are in
    [requirements.md](requirements.md) and are settled; do not reopen them.
 2. This spec is complete once committed. It plans no code. Do not run

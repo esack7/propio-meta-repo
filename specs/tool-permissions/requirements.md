@@ -117,7 +117,18 @@ Permission mode is a separate setting from the existing `execute` / `plan` /
 `discover` agent mode. In plan and discover, classifier-approved read-only
 `bash` commands and writes to the approved plan file do not prompt.
 
-Open (raised in review of `policy-core`, needed before `enforcement`):
+Open (raised in review of `policy-core` on 2026-11-13, needed before
+`enforcement`):
 
-1. Whether exact command grants should be bound to the working directory
-   (and environment overrides). Today they match the command text anywhere.
+1. Whether exact command grants should be bound to the working directory and
+   environment overrides. Today `bash(npm test)` matches that text whatever
+   the call's `cwd` or `env`. The options put to the owner:
+   - **A.** Leave text matching as it is; it is documented in the README.
+   - **B.** Add a working-directory part to the rule syntax, for example
+     `bash(npm test @ /work/project)`.
+   - **C.** Keep text matching, but let no allow rule cover a `bash` call whose
+     `cwd` is outside the workspace or that sets `env`; such calls always ask,
+     as compound commands do. No new syntax. Implemented in `enforcement`,
+     where `bash` arguments become a policy target.
+
+   Recommended: **C**. Not yet decided by the owner.

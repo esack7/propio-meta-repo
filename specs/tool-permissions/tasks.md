@@ -12,6 +12,54 @@ Report completed slice, evidence, remaining scope, next action, and decision nee
 Use `start-slice` to continue authorized work. Run normal `close-spec` only after all
 slices and criteria are verified; worktree cleanup alone does not complete a spec.
 
+## Resuming (handoff written 2026-11-13)
+
+Work stopped by choice after `policy-core` merged; nothing is in progress.
+
+**State**
+
+- `schema-validation` (a1) and `policy-core` (a7, a10, a12) are merged and
+  verified: propio-agent#102 and #103. Evidence is in
+  [delivery.json](delivery.json).
+- `enforcement` (a2, a3, a5, a6, a8, a9, a11) and `approval-ui` (a2, a4, a5)
+  are planned and not started.
+- The worktree `specs/tool-permissions/repos/propio-agent` is clean on
+  `codex/tool-permissions-policy-core` at `e19c10a`, the merged head of #103.
+  Its `node_modules` matches that branch.
+- The meta-repo commits recording all of this are on
+  `feature/maturity-audit-roadmap`, local only, unless pushed since.
+
+**Before starting `enforcement`**
+
+1. Read [requirements.md](requirements.md) "Open questions",
+   [design.md](design.md) "As implemented in `policy-core`" and "Notes for
+   enforcement", and the README section "Reusable policy API (provisional)" in
+   propio-agent.
+2. Get the owner's answer to open question 1 (exact command grants and the
+   working directory). The recommendation is C.
+3. Run `spec-status`, then `start-slice` for `enforcement`. It branches from
+   the current `origin/main`. Run `npm ci` in the worktree afterwards, since
+   `ajv` was added in #102.
+
+**Working agreement** (also in [delivery.json](delivery.json)): implement the
+slices in order and fix in-scope review findings; for the remaining slices,
+commit, push, and open the PR without asking again; ask before merging or
+publishing.
+
+**Practical notes**
+
+- Commits are signed through 1Password. If a commit fails with
+  `1Password: failed to fill whole buffer`, ask the owner to unlock 1Password
+  and retry; do not commit unsigned.
+- `src/auth/openai/__tests__/storage.test.ts` (OS process lock) is flaky,
+  failing in about two of three isolated runs. It is outside this spec;
+  rerun before treating it as a regression.
+- Review comments arrive as inline PR comments: read them with
+  `gh api repos/esack7/propio-agent/pulls/<n>/comments`, not only
+  `gh pr view`.
+- Each review fix so far added a test that fails with the fix reverted; keep
+  doing that.
+
 ## Before the first slice
 
 - [x] Design proposals agreed (2026-11-12); see "Open questions" in

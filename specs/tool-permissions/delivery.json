@@ -47,11 +47,24 @@
         "a10",
         "a12"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/tool-permissions-policy-core",
       "pr": 103,
-      "evidence": {},
-      "note": "In review. Review findings addressed in ed95ab3 (deny recheck on answers, request claimed before awaiting, atomic store update replacing save, escaped exact path grants, frozen presets), 0e0bd42 (per-engine serialized store access, literal workspace and home roots), 377d498 (absolute exact path grants, no exact grant for commands ending in :*), and e19c10a (README: exact command grants ignore working directory). Checks at 377d498945ce30391bcad80dff18e32d65037be1 (e19c10a changes README only): build, 121 suites / 1,961 tests, format check, fallow audit, example:policy. a7: src/policy/__tests__/engine.test.ts (preset table). a10: src/policy/__tests__/boundary.test.ts. a12: src/policy/__tests__/engine.test.ts (owner scopes). Open for enforcement: engines cache rules and do not re-read the store on evaluate; decide when to reload. The file store in approval-ui must make update atomic across processes and load return the latest completed update. Record evidence and mark verified after merge. Open decision before enforcement: bind exact command grants to the working directory?",
+      "evidence": {
+        "a7": {
+          "commit": "e19c10a665e0bafe0d9e1e794cd9b9d4cd7b76aa",
+          "check": "src/policy/__tests__/engine.test.ts 'presets': one table states, for each of read-only, ask, accept-edits, bypass, the outcome of twelve representative calls, and fails if a preset exists without an entry. npm test passed (121 suites, 1,961 tests at 377d498; e19c10a changes README only); build, format check, fallow audit, example:policy passed; CI passed on e19c10a."
+        },
+        "a10": {
+          "commit": "e19c10a665e0bafe0d9e1e794cd9b9d4cd7b76aa",
+          "check": "src/policy/__tests__/boundary.test.ts: every src/policy source imports only sibling modules and minimatch, and references no process, filesystem, network, clock, or mutable module-level state. npm test passed (121 suites, 1,961 tests at 377d498; e19c10a changes README only); build, format check, fallow audit, example:policy passed; CI passed on e19c10a."
+        },
+        "a12": {
+          "commit": "e19c10a665e0bafe0d9e1e794cd9b9d4cd7b76aa",
+          "check": "src/policy/__tests__/engine.test.ts 'owner scopes': engines for three owners sharing one store in one process see none of each other's rules, session grants, or pending requests. npm test passed (121 suites, 1,961 tests at 377d498; e19c10a changes README only); build, format check, fallow audit, example:policy passed; CI passed on e19c10a."
+        }
+      },
+      "note": "Merged 2026-11-13 as propio-agent#103 (merge commit 3014b8cbc44b26cbf57442bc9daac0af7ddb9dea) after three review rounds; changes from the original design are listed in design.md under 'As implemented'. Open decision before enforcement: whether exact command grants are bound to the working directory (requirements.md, open question 1).",
       "start_order": 2
     },
     {
@@ -73,7 +86,7 @@
       "branch": null,
       "pr": null,
       "evidence": {},
-      "note": "Wire the engine into authorizeTool with an approval channel; non-interactive denial; workspace confinement; session grants in the snapshot; fold the global-install prompt."
+      "note": "Next. Wire the engine into authorizeTool with an approval channel; non-interactive denial; workspace confinement; session grants in the snapshot; fold the global-install prompt. Read tasks.md 'Resuming' and design.md 'Notes for enforcement' first; settle requirements.md open question 1 before starting."
     },
     {
       "id": "approval-ui",
