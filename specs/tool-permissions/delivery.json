@@ -134,19 +134,19 @@
       "pr": 105,
       "evidence": {
         "a2": {
-          "commit": "704bd929132838d10d001c054e7f8534e0c87eab",
-          "check": "src/__tests__/agentPermissions.test.ts 'the terminal prompt': through Agent and the CLI's own prompt, a write shows its resolved path and reason before running, and runs once on y. src/ui/__tests__/approvalPrompt.test.ts 'askOperator': only an explicit choice allows; Enter, unrecognized input, and a withdrawn question deny. npm test passed (132 suites, 2,308 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 704bd92."
+          "commit": "f3ae86032f1ce1451762bbba83cab1dd5ac4d177",
+          "check": "src/__tests__/agentPermissions.test.ts 'the terminal prompt': through Agent and the CLI's own prompt, a write shows its resolved path and reason before running, and runs once on y. src/ui/__tests__/approvalPrompt.test.ts 'askOperator': only an explicit choice allows; Enter, unrecognized input, and a withdrawn question deny. npm test passed (133 suites, 2,361 tests); build, format check, fallow audit, example:policy passed locally; CI passed on f3ae860."
         },
         "a4": {
-          "commit": "704bd929132838d10d001c054e7f8534e0c87eab",
-          "check": "src/__tests__/agentPermissions.test.ts 'rules saved in the settings file (a4)': an always-allow answer is written to the settings file and a new Agent with a new store runs the call unasked; a deny rule is not overridden by an allow rule, a session grant, the bypass preset (settings or flag), or bypass mode; a deny added while the question is open refuses the answer. src/config/__tests__/permissionStore.test.ts: concurrent updates from four processes lose no rule. npm test passed (132 suites, 2,308 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 704bd92."
+          "commit": "f3ae86032f1ce1451762bbba83cab1dd5ac4d177",
+          "check": "src/__tests__/agentPermissions.test.ts 'rules saved in the settings file (a4)': an always-allow answer is written to the settings file and a new Agent with a new store runs the call unasked; a deny rule is not overridden by an allow rule, a session grant, the bypass preset (settings or flag), or bypass mode; a deny added while the question is open refuses the answer. src/config/__tests__/permissionStore.test.ts: concurrent updates from four processes lose no rule. npm test passed (133 suites, 2,361 tests); build, format check, fallow audit, example:policy passed locally; CI passed on f3ae860."
         },
         "a5": {
-          "commit": "704bd929132838d10d001c054e7f8534e0c87eab",
-          "check": "src/__tests__/agentPermissions.test.ts 'a session grant chosen at the prompt stops further prompts and is saved with the session': s then a grant at the CLI's prompt, a second turn with no prompt (rule session_grant:write), sessionGrants in the exported session. Restore on resume and absence in a new session are covered by enforcement's a5 evidence. npm test passed (132 suites, 2,308 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 704bd92."
+          "commit": "f3ae86032f1ce1451762bbba83cab1dd5ac4d177",
+          "check": "src/__tests__/agentPermissions.test.ts 'a session grant chosen at the prompt stops further prompts and is saved with the session': s then a grant at the CLI's prompt, a second turn with no prompt (rule session_grant:write), sessionGrants in the exported session. Restore on resume and absence in a new session are covered by enforcement's a5 evidence. npm test passed (133 suites, 2,361 tests); build, format check, fallow audit, example:policy passed locally; CI passed on f3ae860."
         }
       },
-      "note": "In review as propio-agent#105, opened 2026-11-12. File-backed store, full prompt with grants, /permissions, footer label, README. Six review findings fixed in 704bd92 (sandbox rules location and read-only saving, private file mode, os-lock in the image and a clear error without it, cancellation at commit, null permissions, ask-rule guidance); replies to the review comments not posted. Run by hand in a pseudo-terminal against a local stand-in for the model server, and in the built sandbox image with docker run; not run against a real provider or through bin/propio-sandbox. Details in design.md under 'As implemented in approval-ui'.",
+      "note": "In review as propio-agent#105, opened 2026-11-12. File-backed store, full prompt with grants, /permissions, footer label, README. Review round 1 (six findings) fixed in 704bd92; round 2 (absolute host-path rules across the sandbox mount, symlinked settings) in f3ae860. Replies to the review comments not posted. Run by hand in a pseudo-terminal against a local stand-in for the model server, in the built sandbox image, and through bin/propio-sandbox; not run against a real provider. Details in design.md under 'As implemented in approval-ui'.",
       "start_order": 4
     }
   ]

@@ -472,6 +472,17 @@ Where this list and the proposals above disagree, this list is current.
   a `signal`; the store checks it inside the lock as it commits. An explicit
   `"permissions": null` is an error. The non-interactive denial for a matched
   ask rule names that rule instead of suggesting an allow rule or preset.
+- **Sandbox paths (second review of #105).** `bin/propio-sandbox` passes
+  `PROPIO_SANDBOX_HOST_WORKSPACE` and `PROPIO_SANDBOX_HOST_HOME`. In the
+  sandbox `ToolPermissions` gives the engine the host workspace and home, and
+  translates each resolved file path under the container workspace back to
+  its host path before matching (`src/permissions/sandboxPaths.ts`). Rules
+  are never rewritten. Without those variables, a deny or ask rule on a file
+  tool with an absolute or `~/` pattern stops the run.
+- **Symlinked settings.** The store follows a `settings.json` link for reads,
+  writes, and the lock; `createSandboxConfigView` copies a linked settings
+  file's contents in if they are a JSON object and fails otherwise. Other
+  links stay out of the view. `withFileLock` canonicalizes its path.
 - **Not changed.** `runtimeConfig` still reads `runtime` settings from the
   container's home in sandbox mode, so those are ignored there; only
   permissions read the mounted file. That predates this spec.

@@ -21,10 +21,10 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 - `schema-validation` (a1), `policy-core` (a7, a10, a12), and `enforcement`
   (a2, a3, a5, a6, a8, a9, a11) are merged and verified: propio-agent#102,
   #103, and #104.
-- `approval-ui` (a2, a4, a5) is `8015e55` plus review fixes `704bd92`, both
-  signed, on `codex/tool-permissions-approval-ui`, pushed, based on
-  `origin/main` at `cfd0045`. All six review findings are fixed and CI
-  passed; replies to the inline comments are not posted. Evidence is in [delivery.json](delivery.json). Next:
+- `approval-ui` (a2, a4, a5) is `8015e55` plus two rounds of review fixes
+  (`704bd92`, `f3ae860`), all signed, on `codex/tool-permissions-approval-ui`,
+  pushed, based on `origin/main` at `cfd0045`. All eight review findings are
+  fixed and CI passed; replies to the inline comments are not posted. Evidence is in [delivery.json](delivery.json). Next:
   review comments, then the owner's decision to merge. After it merges, mark
   it verified; every criterion is then covered and the spec can be closed
   with `close-spec`.
@@ -32,8 +32,12 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
   this machine during `enforcement` and passes alone; no MCP code changed.
   Treat it like the OpenAI storage test: rerun before calling it a
   regression.
-- Docker on this machine shares the home directory but not `/tmp`; mount
-  test directories from under `$HOME`.
+- Docker on this machine (colima) shares the home directory but not `/tmp`;
+  mount test directories from under `$HOME`. To run `bin/propio-sandbox` with
+  a temporary `HOME`, set `DOCKER_HOST` to the colima socket, since the
+  Docker context lives in the real home. The wrapper builds an image named
+  `propio-agent-agent`, the name the owner's own install would reuse without
+  rebuilding at the same package version: remove it after a test run.
 - To try the CLI without a real model, point `OLLAMA_HOST` at a local server
   that answers `/api/chat` with a tool call. The provider reads `OLLAMA_HOST`
   before the configured host.
