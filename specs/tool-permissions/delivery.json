@@ -51,7 +51,7 @@
       "branch": "codex/tool-permissions-policy-core",
       "pr": 103,
       "evidence": {},
-      "note": "In review. Checks at 51f4033fe2372cbf8a65d7f8271bec79af645d54: build, 121 suites / 1,921 tests, format check, fallow audit, example:policy. a7: src/policy/__tests__/engine.test.ts (preset table). a10: src/policy/__tests__/boundary.test.ts. a12: src/policy/__tests__/engine.test.ts (owner scopes). Differences from the agreed design, stated in the PR: lone & and redirections also block a bash allow rule; a ~/ rule requires a home directory; request ids are UUIDs; POSIX paths only. Record evidence and mark verified after merge.",
+      "note": "In review. Five review findings addressed in ed95ab3 (deny recheck on answers, request claimed before awaiting, atomic store update replacing save, escaped exact path grants, frozen presets). Checks at ed95ab351b77b70be6ad376b751bb158a6a4fcd6: build, 121 suites / 1,942 tests, format check, fallow audit, example:policy. a7: src/policy/__tests__/engine.test.ts (preset table). a10: src/policy/__tests__/boundary.test.ts. a12: src/policy/__tests__/engine.test.ts (owner scopes). Open for enforcement: engines cache rules and do not re-read the store on evaluate; decide when to reload. The file store in approval-ui must make update atomic across processes. Record evidence and mark verified after merge.",
       "start_order": 2
     },
     {
