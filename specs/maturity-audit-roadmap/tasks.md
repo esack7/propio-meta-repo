@@ -14,6 +14,7 @@ specs listed in [design.md](design.md), each with its own delivery record.
 - [x] Package layout and second consumer decided (2026-11-11).
 - [x] Remaining open questions answered (2026-11-11).
 - [x] Create the first follow-on spec (`tool-permissions`) with `create-spec`: [tool-permissions](../tool-permissions/requirements.md).
+- [x] Create the phase 2 spec (`turn-steering`): [turn-steering](../turn-steering/requirements.md).
 
 ## Baseline checks (2026-11-11, Node 22.23.3)
 
@@ -41,9 +42,9 @@ and note which behaviors are the most disruptive.
 
 **Current (2026-11-13):** phase 1, `tool-permissions`, is complete: all four
 slices are merged (propio-agent#102–#105), every criterion is verified, and its
-worktree is closed. Next is a spec for phase 2 (`turn-steering`) or another
-phase whose dependencies are met; none has been created yet. The steps below
-describe how phase 1 was started.
+worktree is closed. Phase 2 has its spec, [turn-steering](../turn-steering/requirements.md),
+created on 2026-11-13; its state is in that spec's delivery record. The steps
+below describe how phase 1 was started.
 
 1. Read [audit.md](audit.md), then [design.md](design.md). Decisions are in
    [requirements.md](requirements.md) and are settled; do not reopen them.

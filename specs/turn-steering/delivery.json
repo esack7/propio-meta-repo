@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "spec": "turn-steering",
+  "working_agreement": "Requested 2026-11-13: create the spec and proceed as for tool-permissions. Implement the planned slices in order and fix in-scope review findings; commit each slice, push its branch, and open its pull request without asking again. The design's proposals are implemented as written and corrected in review. Ask before merging or publishing.",
+  "criteria": {
+    "a1": "Input submitted mid-turn reaches the model before its next request, in the order it was submitted",
+    "a2": "Interrupting during a tool call leaves completed results in context and does not replay them; the next request has a result for every tool call",
+    "a3": "Cancellation of a running bash command terminates its process group",
+    "a4": "Every command survives a JSON round trip, and a headless test drives a full steered turn with commands alone",
+    "a5": "In the terminal the operator can type while a turn runs; queued input is shown as pending until delivered and then appears in the transcript where the model received it",
+    "a6": "Escape returns to the prompt without ending the session, and undelivered input is not lost",
+    "a7": "The command contract and session controller read no keys, hold no module-level state, and pass a guarded-import test; two sessions in one process are isolated",
+    "a8": "Each delivered guidance message and each interrupt appears in the trace with actor user"
+  },
+  "slices": [
+    {
+      "id": "process-group",
+      "repo": "propio-agent",
+      "depends_on": [],
+      "criteria": [
+        "a3"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Shell commands run in their own process group; abort, timeout, and output cap terminate the group with escalation."
+    },
+    {
+      "id": "runtime-steering",
+      "repo": "propio-agent",
+      "depends_on": [
+        "process-group"
+      ],
+      "criteria": [
+        "a1",
+        "a2",
+        "a8"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Guidance source drained at iteration boundaries, continuation at the final answer, interrupt that resolves unresolved calls, trace records. Includes the per-adapter request-shape check."
+    },
+    {
+      "id": "session-commands",
+      "repo": "propio-agent",
+      "depends_on": [
+        "runtime-steering"
+      ],
+      "criteria": [
+        "a4",
+        "a7"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Command types, AgentSession, approvals through commands, subpath export, example. CLI dispatches through it with the same keys as before."
+    },
+    {
+      "id": "steering-ui",
+      "repo": "propio-agent",
+      "depends_on": [
+        "session-commands"
+      ],
+      "criteria": [
+        "a1",
+        "a5",
+        "a6"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Turn input reader, queued display, Escape restoring undelivered input, footer hint, README."
+    }
+  ]
+}
