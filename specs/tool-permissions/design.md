@@ -352,14 +352,77 @@ Things the next slice must handle that the proposals above do not spell out:
   latest completed update.
 
 
+## As implemented in `enforcement`
+
+Where this list and the proposals above disagree, this list is current. The
+code is in `src/permissions/`, `src/ui/approvalPrompt.ts`, and the README
+section "Tool permissions".
+
+- **Wiring.** `ToolPermissions` (`src/permissions/toolPermissions.ts`) owns
+  the engine for one `Agent`. `Agent.authorizeToolExecution` runs the plan and
+  discover checks, then calls it. The engine loads on first use and reloads at
+  the start of each turn.
+- **Open question 1 (option C).** `PolicyTarget` for a command gained
+  `detached?: boolean`. The application sets it when the resolved `cwd` is
+  outside the workspace or `env` is non-empty. A command pattern, exact or
+  prefix, never allows a detached command, and no exact grant is offered for
+  one. "As compound commands do" is read literally: a whole-tool rule (`bash`)
+  or capability rule still covers it, as it covers a compound command, because
+  such a rule names no command text. Deny and ask rules match as before.
+- **Unknown tools** are allowed through with rule `unknown_tool`, so execution
+  reports "not found" and the operator is not asked about a call that cannot
+  run.
+- **No channel.** The design had non-interactive runs supply a channel that
+  answers `deny`. Instead an `Agent` without a channel denies without asking,
+  with rule `non_interactive` and actor `application`, so the trace does not
+  attribute the denial to a user. The interactive CLI sets a channel.
+- **Global installs.** Only the reason changes: a classified install that
+  asks by mode default shows the classifier's reason. `BashTool` no longer
+  gates installs and `shell.globalInstallGate` is gone from the tools API, so
+  a consumer of `@propio-ai/agent/tools` that does not put policy in front
+  now runs them. The deprecated setting allows classified installs with rule
+  `env:PROPIO_ALLOW_GLOBAL_INSTALLS`, never over an explicit ask or deny rule.
+- **`--permissions <preset>`** moved here from `approval-ui`. Without it,
+  once the default became `ask`, a non-interactive run had no way to write or
+  run commands until the file-backed store landed.
+- **Minimal prompt.** Allow once or deny (`y`/`N`). Session and always grants
+  from the prompt are `approval-ui`; session grants are exercised here through
+  the channel in tests, and persist in the snapshot as
+  `metadata.sessionGrants`.
+- **Cancelling.** `PromptConfirmRequest` takes a `signal`; aborting the turn
+  closes the prompt, and an answer that arrives after the abort is discarded.
+- **Agent API.** `setGlobalInstallApprovalCallback` is replaced by
+  `setApprovalChannel`; the constructor takes `permissions` (`store`, `owner`,
+  `preset`, `mode`, `approvalChannel`). `AgentToolAuthorizationRequest` carries
+  `toolCallId`. The trace configuration snapshot reports
+  `approvalChannelConfigured`, `permissionPreset`, and `permissionMode` in
+  place of `globalInstallApprovalCallbackConfigured`.
+- **Tests.** `createTestAgent` and the direct constructions in
+  `agent.test.ts` pass the `bypass` preset; tests about permissions construct
+  their own.
+
+## Notes for approval-ui
+
+- The prompt renders from `ApprovalRequest` only; `request.suggestions` holds
+  the grants to offer. `allow_always` needs the file-backed store first.
+- `ToolPermissions.describe()` and `listSessionGrants()` exist for
+  `/permissions`; revoking and rule edits need pass-throughs to the engine.
+- The typed text of a confirm prompt is not echoed while a turn runs, because
+  the cancel listener holds the terminal in raw mode. The full prompt should
+  handle keys itself.
+- The non-interactive denial message names `--permissions` only; add the
+  settings rule once the file store exists.
+
+## Slices
+
 One PR each, in order. Status lives in [delivery.json](delivery.json).
 
 | Slice | Content | Criteria |
 | --- | --- | --- |
 | `schema-validation` | Validation in the registry and MCP path; `invalid_arguments` status | a1 |
 | `policy-core` | `src/policy` and its subpath export: metadata, rules, modes, presets, engine, approval types, store interface, in-memory store. Tool metadata on built-ins and MCP. No behavior change in the CLI. | a7, a10, a12 |
-| `enforcement` | Engine wired into `authorizeTool`; approval channel; non-interactive denial; workspace confinement; session grants in the snapshot; global-install folding; trace actor. Interactive CLI uses a minimal prompt so the default can flip in this PR. | a2, a3, a5, a6, a8, a9, a11 |
-| `approval-ui` | Full prompt with grant choices, file-backed store, `/permissions`, `--permissions` flag, footer label, README | a2, a4, a5 |
+| `enforcement` | Engine wired into `authorizeTool`; approval channel; non-interactive denial; workspace confinement; session grants in the snapshot; global-install folding; trace actor; `--permissions` flag. Interactive CLI uses a minimal prompt so the default can flip in this PR. | a2, a3, a5, a6, a8, a9, a11 |
+| `approval-ui` | Full prompt with grant choices, file-backed store, `/permissions`, footer label, README | a2, a4, a5 |
 
 ## Checks by risk
 

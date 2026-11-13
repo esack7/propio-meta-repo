@@ -12,34 +12,23 @@ Report completed slice, evidence, remaining scope, next action, and decision nee
 Use `start-slice` to continue authorized work. Run normal `close-spec` only after all
 slices and criteria are verified; worktree cleanup alone does not complete a spec.
 
-## Resuming (handoff written 2026-11-13)
+## Resuming (updated 2026-11-12, second machine)
 
-Work stopped by choice after `policy-core` merged; nothing is in progress.
+`enforcement` is in review as propio-agent#104.
 
 **State**
 
 - `schema-validation` (a1) and `policy-core` (a7, a10, a12) are merged and
-  verified: propio-agent#102 and #103. Evidence is in
-  [delivery.json](delivery.json).
-- `enforcement` (a2, a3, a5, a6, a8, a9, a11) and `approval-ui` (a2, a4, a5)
-  are planned and not started.
-- The worktree `specs/tool-permissions/repos/propio-agent` is clean on
-  `codex/tool-permissions-policy-core` at `e19c10a`, the merged head of #103.
-  Its `node_modules` matches that branch.
-- The meta-repo commits recording all of this are on
-  `feature/maturity-audit-roadmap`, local only, unless pushed since.
-
-**Before starting `enforcement`**
-
-1. Read [requirements.md](requirements.md) "Open questions",
-   [design.md](design.md) "As implemented in `policy-core`" and "Notes for
-   enforcement", and the README section "Reusable policy API (provisional)" in
-   propio-agent.
-2. Get the owner's answer to open question 1 (exact command grants and the
-   working directory). The recommendation is C.
-3. Run `spec-status`, then `start-slice` for `enforcement`. It branches from
-   the current `origin/main`. Run `npm ci` in the worktree afterwards, since
-   `ajv` was added in #102.
+  verified: propio-agent#102 and #103.
+- `enforcement` (a2, a3, a5, a6, a8, a9, a11) is one signed commit, `1a0325e`,
+  on `codex/tool-permissions-enforcement`, pushed, based on `origin/main` at
+  `3014b8c`. Evidence is in [delivery.json](delivery.json). Next: review
+  comments and CI, then the owner's decision to merge.
+- `approval-ui` (a2, a4, a5) is planned. Read [design.md](design.md) "As
+  implemented in `enforcement`" and "Notes for approval-ui" first.
+- This machine did not have the merged slice branches. They were restored
+  from GitHub's `refs/pull/102/head` and `refs/pull/103/head`, which match the
+  recorded evidence commits, with the owner's approval.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; for the remaining slices,
