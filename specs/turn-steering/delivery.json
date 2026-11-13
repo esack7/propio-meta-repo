@@ -43,7 +43,7 @@
         "a2",
         "a8"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/turn-steering-runtime-steering",
       "pr": 107,
       "evidence": {
@@ -60,7 +60,7 @@
           "check": "src/agent-core/__tests__/steering.test.ts 'steering in the trace (a8)': each delivered message is an operator_guidance record with actor user, id, iteration, and length, recorded before the request it precedes, text only at full capture; turn_cancelled records actor user for interrupt, escape, and sigint, and application otherwise, with phase and interrupted call ids. npm test passed (138 suites, 2,451 tests); build, format check, fallow audit passed locally."
         }
       },
-      "note": "In review as propio-agent#107. Review round 1 (two P2: task dropped by prompt selection, delivered guidance removed on interrupt) fixed in cdb3baf by storing guidance as a guidance entry inside the current turn, as the design first proposed. Sessions with guidance cannot be read by earlier versions.",
+      "note": "Merged 2026-11-13 as propio-agent#107 (merge commit b7d2061ed894f0a1db78e58ce644670d5ee9d0f1) after one review round with two P2 findings, fixed in cdb3baf and confirmed by re-review. Guidance is a guidance entry inside the current turn; sessions and recovery journals containing guidance cannot be read by earlier versions.",
       "start_order": 2
     },
     {
