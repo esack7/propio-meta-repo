@@ -235,6 +235,47 @@ interface structurally.
   this slice, but before it the commands were in the terminal's process
   group.
 
+## As implemented in `runtime-steering`
+
+Where this list and "Approach" disagree, this list is current.
+
+- **Guidance starts a new turn record.** The conversation store holds one
+  user message per turn (`TurnEntry` is `assistant` or `tool`). A third entry
+  kind would change the saved-session format (`src/context/codec.ts` rejects
+  unknown kinds) and the recovery journal. Instead the runtime calls
+  `beginUserTurn` for each guidance message, which is what a message sent
+  after an Escape already does. There is no `appendOperatorGuidance`.
+  - The turn that guidance cut short has no final answer, so it stays
+    incomplete and is not eligible for the rolling summary. Interrupted turns
+    already behave this way.
+  - Tool results that finished just before the guidance are sent as stored
+    summaries (`toolResultSummaryMaxChars`, 1,500 by default) one request
+    earlier than otherwise, because only the current turn's last batch is
+    sent in full.
+  - The trace `turnId` changes at each guidance message; the turn operation
+    id does not.
+- **No interrupted-step note.** An interrupted batch says so in its results;
+  an interrupted model step leaves nothing in context to explain.
+- **Result wording is neutral** ("Interrupted before this call finished"),
+  since the same path serves any abort. Status is `error`.
+- **Trace.** Guidance is `operator_guidance`. There is no `turn_interrupted`
+  type: the existing `turn_cancelled` record gains `actor`, `reason`,
+  `phase`, and `interruptedToolCallIds`. Actor is `user` for the reasons
+  `interrupt`, `escape`, and `sigint`.
+- **`discardInterruptedTurn` is unchanged** and the CLI still sets it; it
+  only ever removed a turn with no entries. `interrupt` is accepted beside
+  `escape`.
+- **Lead-in.** `formatOperatorGuidance` in `src/agent-core/runtime.ts` is the
+  one place the wording lives. The stored user message includes it; the
+  `guidance_delivered` event carries the bare text for display.
+- **Provider sequence.** All ten adapters in `@propio-ai/providers` 0.6.0
+  build a request with a user message after tool results, two user messages
+  in a row, and a user message after a final answer. Checked with stubbed
+  transports, not live.
+- **Not done.** File mentions in guidance are not expanded. No tool event is
+  emitted for a call resolved as interrupted; the frontend learns of it from
+  `turn_cancelled`.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).

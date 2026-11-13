@@ -15,7 +15,7 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 ## Resuming (updated 2026-11-13)
 
 `process-group` (a3) is merged and verified: propio-agent#106 (merge commit
-`c33a73f`). `runtime-steering` (a1, a2, a8) is in progress. Then
+`c33a73f`). `runtime-steering` (a1, a2, a8) is in review as propio-agent#107. Then
 `session-commands`, then `steering-ui`; see "Slices" in
 [design.md](design.md).
 
