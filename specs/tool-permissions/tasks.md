@@ -14,19 +14,13 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-12, second machine)
 
-`enforcement` is in review as propio-agent#104.
+`enforcement` merged as propio-agent#104; `approval-ui` is next.
 
 **State**
 
-- `schema-validation` (a1) and `policy-core` (a7, a10, a12) are merged and
-  verified: propio-agent#102 and #103.
-- `enforcement` (a2, a3, a5, a6, a8, a9, a11) is on
-  `codex/tool-permissions-enforcement`, based on `origin/main` at `3014b8c`:
-  `1a0325e` and five rounds of review fixes (`503fab0`, `adaaf87`,
-  `1b1c28b`, `e4ab767`, `06e3f48`), all signed and pushed. All eleven review
-  findings are fixed and CI passed;
-  replies to the inline comments are not posted. Evidence is in
-  [delivery.json](delivery.json). Next: the owner's decision to merge.
+- `schema-validation` (a1), `policy-core` (a7, a10, a12), and `enforcement`
+  (a2, a3, a5, a6, a8, a9, a11) are merged and verified: propio-agent#102,
+  #103, and #104. Evidence is in [delivery.json](delivery.json).
 - `src/mcp/__tests__/boundary.test.ts` failed in 2 of 10 local full runs on
   this machine and passes alone; no MCP code changed. Treat it like the
   OpenAI storage test: rerun before calling it a regression.

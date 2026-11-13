@@ -82,7 +82,7 @@
         "a9",
         "a11"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/tool-permissions-enforcement",
       "pr": 104,
       "evidence": {
@@ -115,7 +115,7 @@
           "check": "src/permissions/__tests__/toolPermissions.test.ts 'an approval answered by another process (a11)': the request is written as JSON to a child process, which answers allow_session or deny; the parsed wire text matches the request. npm test passed (127 suites, 2,176 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 06e3f48."
         }
       },
-      "note": "In review as propio-agent#104, opened 2026-11-12. Open question 1 decided as option C. The --permissions flag moved here from approval-ui. Review round 1 fixed in 503fab0, round 2 (tool-call line escaping, anchored search walk replacing fast-glob, strict install recognizer) in adaaf87, round 3 (npm scope flags overriding --global) in 1b1c28b, round 4 (npm argument allowlist for the legacy setting) in e4ab767, round 5 (literal shell words only for the legacy setting) in 06e3f48. Replies to the review comments not yet posted. src/mcp/__tests__/boundary.test.ts failed intermittently in 2 of 10 local full runs (passes alone; no MCP code changed). Differences from the proposals are in design.md under 'As implemented in enforcement'.",
+      "note": "Merged 2026-11-13 as propio-agent#104 (merge commit cfd0045b17da9b9b486905140d3e394d5eeee8fe) after five review rounds; marked breaking, so the squash commit is a major release. Open question 1 decided as option C. The --permissions flag moved here from approval-ui. Differences from the proposals are in design.md under 'As implemented in enforcement'. src/mcp/__tests__/boundary.test.ts failed intermittently in 2 of 10 local full runs on the second machine (passes alone; no MCP code changed).",
       "start_order": 3
     },
     {
