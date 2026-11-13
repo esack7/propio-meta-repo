@@ -117,4 +117,7 @@ Permission mode is a separate setting from the existing `execute` / `plan` /
 `discover` agent mode. In plan and discover, classifier-approved read-only
 `bash` commands and writes to the approved plan file do not prompt.
 
-None remain open.
+Open (raised in review of `policy-core`, needed before `enforcement`):
+
+1. Whether exact command grants should be bound to the working directory
+   (and environment overrides). Today they match the command text anywhere.
