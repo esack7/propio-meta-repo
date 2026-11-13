@@ -14,9 +14,10 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-13)
 
-The spec is planned and no slice has started. Slices, in order:
-`process-group`, `runtime-steering`, `session-commands`, `steering-ui`; see
-"Slices" in [design.md](design.md).
+`process-group` (a3) is in review as propio-agent#106. Next, once it is
+merged: `runtime-steering`, then `session-commands`, then `steering-ui`; see
+"Slices" in [design.md](design.md). `start-slice` refuses the next slice
+until #106 is merged.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
@@ -30,3 +31,17 @@ questions" in [requirements.md](requirements.md); expect corrections in review.
 `src/mcp/__tests__/boundary.test.ts` are flaky and outside this spec; review
 comments arrive as inline PR comments; each review fix adds a test that fails
 with the fix reverted.
+
+## Baseline checks (2026-11-13, Node 24.11.0)
+
+Run in `specs/turn-steering/repos/propio-agent` at
+`0d24312e165868b6d32743825aceb3548aad9b70` (equal to `origin/main`) after a
+fresh `npm ci`.
+
+- `npm run build`: passed.
+- `npm test`: 133 of 133 suites, 2,380 of 2,380 tests passed.
+- `npm run format:check`: passed.
+- `npx fallow audit`: not run at the baseline; passes on the first slice.
+- The first slice's edit to `src/tools/runShellCommand.ts` began while this
+  test run was in progress. The counts match the slice's later full run less
+  its eight new tests.

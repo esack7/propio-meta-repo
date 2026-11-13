@@ -20,11 +20,17 @@
       "criteria": [
         "a3"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
-      "evidence": {},
-      "note": "Shell commands run in their own process group; abort, timeout, and output cap terminate the group with escalation."
+      "status": "review",
+      "branch": "codex/turn-steering-process-group",
+      "pr": 106,
+      "evidence": {
+        "a3": {
+          "commit": "578b41b40adb1a1bfe99da6d8053ba673376ab11",
+          "check": "src/tools/__tests__/processGroup.test.ts (real processes): a background child of the shell is gone after cancel, timeout, and the output cap; a child that ignores SIGTERM is gone after the grace period; the same through BashTool with classification cancelled. Five of the six fail with detached turned off. src/tools/__tests__/runShellCommand.test.ts: spawn options and SIGKILL only while the command is open. npm test passed (134 suites, 2,388 tests); build, format check, fallow audit passed locally."
+        }
+      },
+      "note": "In review as propio-agent#106. Only the cancellable (spawn) path is grouped; a call without an abort signal still uses execFile. Review points raised in the PR: no controlling terminal for a grouped command, and Ctrl+C reaching the command through the abort handler instead of the terminal.",
+      "start_order": 1
     },
     {
       "id": "runtime-steering",

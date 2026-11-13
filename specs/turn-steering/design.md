@@ -202,6 +202,17 @@ interface structurally.
 - The footer hint during a turn names both controls: type to guide, Escape to
   interrupt.
 
+## As implemented in `process-group`
+
+- Only the cancellable path (`runWithSpawn`) is grouped. `runShellCommand`
+  without an abort signal still uses `execFile`, whose timeout signals the
+  shell alone. The CLI passes a signal for every `bash` call and `!` command.
+- The result is reported when the command's output closes, as before. A
+  child that ignores `SIGTERM` holds it open until the `SIGKILL`.
+- A grouped command is in a new session and has no controlling terminal.
+  Terminal `SIGINT` reaches it through the CLI's abort handler, not directly.
+- The grace period is a module constant; `killGraceMs` exists for tests.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).
