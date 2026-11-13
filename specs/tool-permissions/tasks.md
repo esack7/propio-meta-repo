@@ -22,10 +22,13 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
   verified: propio-agent#102 and #103.
 - `enforcement` (a2, a3, a5, a6, a8, a9, a11) is on
   `codex/tool-permissions-enforcement`, based on `origin/main` at `3014b8c`:
-  `1a0325e` plus review fixes `503fab0`, both signed and pushed. All five
-  review findings are fixed and CI passed; replies to the inline comments
-  are not posted. Evidence is in [delivery.json](delivery.json). Next: the
-  owner's decision to merge.
+  `1a0325e`, review fixes `503fab0`, and follow-up fixes `adaaf87`, all
+  signed and pushed. All eight review findings are fixed and CI passed;
+  replies to the inline comments are not posted. Evidence is in
+  [delivery.json](delivery.json). Next: the owner's decision to merge.
+- `src/mcp/__tests__/boundary.test.ts` failed in 2 of 10 local full runs on
+  this machine and passes alone; no MCP code changed. Treat it like the
+  OpenAI storage test: rerun before calling it a regression.
 - `approval-ui` (a2, a4, a5) is planned. Read [design.md](design.md) "As
   implemented in `enforcement`" and "Notes for approval-ui" first.
 - This machine did not have the merged slice branches. They were restored

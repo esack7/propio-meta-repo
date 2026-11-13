@@ -87,35 +87,35 @@
       "pr": 104,
       "evidence": {
         "a2": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/permissions/__tests__/toolPermissions.test.ts 'ask mode (a2)': write, edit, bash, and an MCP call reach the channel before running and do not run on deny; read, grep, find, ls inside the workspace do not ask. src/__tests__/agentPermissions.test.ts: the same through Agent with the real write, bash, and read tools. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/permissions/__tests__/toolPermissions.test.ts 'ask mode (a2)': write, edit, bash, and an MCP call reach the channel before running and do not run on deny; read, grep, find, ls inside the workspace do not ask. src/__tests__/agentPermissions.test.ts: the same through Agent with the real write, bash, and read tools. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a3": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/__tests__/agentPermissions.test.ts 'returns a denial to the model as a tool result and continues the turn': the file is unchanged, the second provider request carries the denial, and the turn returns the final answer. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/__tests__/agentPermissions.test.ts 'returns a denial to the model as a tool result and continues the turn': the file is unchanged, the second provider request carries the denial, and the turn returns the final answer. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a5": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/__tests__/agentPermissions.test.ts 'session approvals (a5)': one prompt for two writes, sessionGrants in the exported snapshot, no prompt after import in a new Agent, a prompt again in a fresh Agent. toolPermissions.test.ts 'session grants (a5)'. The grant is given through the channel; the interactive prompt offers it in approval-ui. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/__tests__/agentPermissions.test.ts 'session approvals (a5)': one prompt for two writes, sessionGrants in the exported snapshot, no prompt after import in a new Agent, a prompt again in a fresh Agent. toolPermissions.test.ts 'session grants (a5)'. The grant is given through the channel; the interactive prompt offers it in approval-ui. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a6": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/__tests__/agentPermissions.test.ts 'starts in ask mode with nothing configured': an Agent built with no permissions leaves the file unwritten. toolPermissions.test.ts 'the default'. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/__tests__/agentPermissions.test.ts 'starts in ask mode with nothing configured': an Agent built with no permissions leaves the file unwritten. toolPermissions.test.ts 'the default'. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a8": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/__tests__/agentPermissions.test.ts 'never waits for an answer when there is no one to ask': the turn completes with a non_interactive denial. toolPermissions.test.ts 'without an approval channel (a8)'. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/__tests__/agentPermissions.test.ts 'never waits for an answer when there is no one to ask': the turn completes with a non_interactive denial. toolPermissions.test.ts 'without an approval channel (a8)'. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a9": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/__tests__/agentPermissions.test.ts 'records each decision in the trace with its rule and actor': tool_policy_decision events for an approval (user, approval:allow_once), a refusal (user, approval:deny), and bypass (application, mode:bypass). toolPermissions.test.ts 'decisions name who decided and by what rule (a9)'. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/__tests__/agentPermissions.test.ts 'records each decision in the trace with its rule and actor': tool_policy_decision events for an approval (user, approval:allow_once), a refusal (user, approval:deny), and bypass (application, mode:bypass). toolPermissions.test.ts 'decisions name who decided and by what rule (a9)'. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         },
         "a11": {
-          "commit": "503fab05fa42241a857fb432d64584479a24f8e7",
-          "check": "src/permissions/__tests__/toolPermissions.test.ts 'an approval answered by another process (a11)': the request is written as JSON to a child process, which answers allow_session or deny; the parsed wire text matches the request. npm test passed (126 suites, 2,083 tests); build, format check, fallow audit, example:policy passed locally; CI passed on 503fab0."
+          "commit": "adaaf875277e98f13c4f6aa12b24ca77368f7c02",
+          "check": "src/permissions/__tests__/toolPermissions.test.ts 'an approval answered by another process (a11)': the request is written as JSON to a child process, which answers allow_session or deny; the parsed wire text matches the request. npm test passed (127 suites, 2,129 tests); build, format check, fallow audit, example:policy passed locally; CI passed on adaaf87."
         }
       },
-      "note": "In review as propio-agent#104, opened 2026-11-12. Open question 1 decided as option C. The --permissions flag moved here from approval-ui. Five review findings fixed in 503fab0 (search containment, prompt escaping, legacy install setting, abort listener, breaking-change title and footer); replies to the review comments not yet posted. Differences from the proposals are in design.md under 'As implemented in enforcement'.",
+      "note": "In review as propio-agent#104, opened 2026-11-12. Open question 1 decided as option C. The --permissions flag moved here from approval-ui. Review round 1 fixed in 503fab0, round 2 (tool-call line escaping, anchored search walk replacing fast-glob, strict install recognizer) in adaaf87. Replies to the review comments not yet posted. src/mcp/__tests__/boundary.test.ts failed intermittently in 2 of 10 local full runs (passes alone; no MCP code changed). Differences from the proposals are in design.md under 'As implemented in enforcement'.",
       "start_order": 3
     },
     {

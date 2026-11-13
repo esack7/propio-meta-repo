@@ -397,14 +397,19 @@ section "Tool permissions".
   `toolCallId`. The trace configuration snapshot reports
   `approvalChannelConfigured`, `permissionPreset`, and `permissionMode` in
   place of `globalInstallApprovalCallbackConfigured`.
-- **Review of #104.** `grep` and `find` stay under the directory they search
-  (`listContainedFiles` in `src/tools/shared.ts`): policy approves the root,
-  so nothing reached through a link out of it is read or listed. The prompt
-  renders control and invisible characters in every untrusted field as
-  escapes (`visibleText`). The deprecated install setting covers only a plain
-  install command, never a compound or detached one. The PR is marked
-  breaking (`!` and a `BREAKING CHANGE:` footer), which makes the squash
-  commit a major release.
+- **Review of #104.** `grep` and `find` walk the approved directory
+  themselves (`src/tools/containedFiles.ts`): policy approves the root, so
+  the walk opens only directories under it that the pattern can still match,
+  never enters a link, and keeps a linked file only when it resolves under
+  the root. `fast-glob` is gone; `tsconfig.json` declares the Node types,
+  which TypeScript 6 no longer includes by default. Every untrusted field is
+  shown with control and invisible characters escaped (`src/ui/visibleText.ts`),
+  in the approval question and in tool-call lines at the `TerminalUi`
+  boundary. The deprecated install setting covers only what
+  `isUnambiguousGlobalInstall` recognizes: one command, no wrapper, whose
+  subcommand is the manager's own install. The broader classifier still
+  supplies the prompt's reason. The PR is marked breaking (`!` and a
+  `BREAKING CHANGE:` footer), which makes the squash commit a major release.
 - **Tests.** `createTestAgent` and the direct constructions in
   `agent.test.ts` pass the `bypass` preset; tests about permissions construct
   their own.
