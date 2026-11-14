@@ -12,13 +12,14 @@ Report completed slice, evidence, remaining scope, next action, and decision nee
 Use `start-slice` to continue authorized work. Run normal `close-spec` only after all
 slices and criteria are verified; worktree cleanup alone does not complete a spec.
 
-## Resuming (updated 2026-11-13)
+## Resuming (updated 2026-11-14)
 
-`display-payload` (a8) merged 2026-11-14 as propio-agent#110 (`c033045`)
-and is verified. `call-renderers` is next. Then `approval-display`,
-`live-output`, `protocol-events`. See "Slices" in [design.md](design.md); what
-the first slice changed from the design is under "As implemented in
-`display-payload`".
+`display-payload` merged as propio-agent#110 and is verified.
+`call-renderers` is implemented and ready for review in propio-agent#111
+at `666bab5`. All local checks pass (149 suites, 2,691 tests, 60 snapshots),
+and the CLI was verified in tmux. Await review/merge, then reconcile delivery
+before starting `approval-display`; `live-output` and `protocol-events` follow.
+See [delivery.json](delivery.json) for criterion-specific evidence.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each

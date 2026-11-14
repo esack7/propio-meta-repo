@@ -337,6 +337,23 @@ Where this list and "Approach" disagree, this list is current.
   Line counts for `read` are of the text returned to the model, which for a
   result stored externally is the preview.
 
+## As implemented in `call-renderers`
+
+- `src/ui/toolDisplay/render.ts` renders five kinds from `ToolDisplay`.
+  `ToolCallDisplay` carries the payload and runtime status; the old label view
+  and temporary label conversion exports are removed.
+- Completion events optionally carry `fullOutputPath`; expansion prints that
+  escaped path without reading the external file.
+- Ctrl+O expands; Ctrl+Y now toggles tool visibility. `/expand` is an idle
+  command. Ctrl+O clears and restores the prompt layout without losing input.
+- Failed reads/searches/generic calls use a second error line. Diff/command
+  collapsed output remains at most twelve lines including error/hidden counts.
+- Completed diffs are colored; plain output remains unstyled. Expanded text
+  wraps using the shared grapheme-aware width functions.
+- Real terminal testing exposed a pre-existing bottom-zone clear off-by-one:
+  newline-terminated entries leave the cursor on an empty row, which must also
+  be cleared. A regression test and a repeated tmux capture verify the fix.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json). The

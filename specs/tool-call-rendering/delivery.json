@@ -46,11 +46,32 @@
         "a5",
         "a9"
       ],
-      "status": "implementing",
+      "status": "review",
       "branch": "codex/tool-call-rendering-call-renderers",
       "pr": 111,
-      "evidence": {},
-      "note": "Per-kind renderers with snapshots, single layout, bottom zone for all calls in flight, /expand and Ctrl+O, removal of ToolCallView and label fields. Covers the after-completion half of a1. Resumed 2026-11-14. Draft PR #111 is an early review checkpoint at a34cbac: standalone renderers only; terminal integration, expansion controls, label removal, renderer fidelity, and terminal validation remain. Build, formatting, Fallow changed-file audit, and 148 suites / 2674 tests / 60 snapshots pass. Slice remains implementing; acceptance is not yet verified.",
+      "evidence": {
+        "a1": {
+          "commit": "666bab522af13f979fecea86cf58752c0920e4fd",
+          "check": "Completion diff renderer snapshots and real tmux CLI write show added lines. This slice covers the after-completion half; before-approval display remains in approval-display. Build, format check, Fallow audit against origin/main, and full suite passed (149 suites, 2691 tests, 60 snapshots)."
+        },
+        "a3": {
+          "commit": "666bab522af13f979fecea86cf58752c0920e4fd",
+          "check": "render.test.ts bounds ten calls per kind and large diffs/commands; toolDisplayIntegration.test.ts expands hidden lines and escaped external paths. Real CLI /expand and Ctrl+O show all 30 command lines and restore prompt. Build, format check, Fallow audit against origin/main, and full suite passed (149 suites, 2691 tests, 60 snapshots)."
+        },
+        "a4": {
+          "commit": "666bab522af13f979fecea86cf58752c0920e4fd",
+          "check": "toolDisplayIntegration.test.ts compares calls with thinking on/off and removes only completed calls; replUi.test.ts draws all in-flight payloads in order. Real tmux completion capture has each final result once and no stale running row. Build, format check, Fallow audit against origin/main, and full suite passed (149 suites, 2691 tests, 60 snapshots)."
+        },
+        "a5": {
+          "commit": "666bab522af13f979fecea86cf58752c0920e4fd",
+          "check": "60 snapshots: five kinds \u00d7 running/success/error \u00d7 40/120 columns \u00d7 collapsed/expanded; additional long-line and Unicode width checks. Build, format check, Fallow audit against origin/main, and full suite passed (149 suites, 2691 tests, 60 snapshots)."
+        },
+        "a9": {
+          "commit": "666bab522af13f979fecea86cf58752c0920e4fd",
+          "check": "Hostile controls escaped in renderer tests and approvalRendering.test.ts; toolDisplayIntegration.test.ts escapes external output paths; payload prefixes preserved when wrapping. Approval payload-specific checks remain in approval-display. Build, format check, Fallow audit against origin/main, and full suite passed (149 suites, 2691 tests, 60 snapshots)."
+        }
+      },
+      "note": "PR #111 ready for review. Structured CLI rendering, all running calls, completed transcript entries independent of thinking, /expand and Ctrl+O, Ctrl+Y visibility toggle, and legacy event-label removal implemented. Covers after-completion half of a1; approval-display owns before-approval rendering. Real tmux CLI check caught and verified the stale running-row fix. Await review and merge; do not advance dependent slices before merge.",
       "start_order": 2
     },
     {
