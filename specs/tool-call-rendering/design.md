@@ -313,7 +313,9 @@ Where this list and "Approach" disagree, this list is current.
   recorded (review of #110).
 - **The budget is measured, not only raced.** A description is accepted
   only if it arrived within 250 ms of monotonic time, since the budget
-  timer cannot fire while a hook blocks the event loop (review of #110).
+  timer cannot fire while a hook blocks the event loop. The timer is set
+  for what is left of the budget after the hook returns, so work before its
+  first await counts (review of #110).
 - **The diff search has a deadline.** Previews give it 50 ms; past it the
   differing middle is shown as one replacement, which is still a correct
   diff. The diff works only on the changed region and its context. A 1 MB
