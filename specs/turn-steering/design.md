@@ -276,6 +276,45 @@ Where this list and "Approach" disagree, this list is current.
   emitted for a call resolved as interrupted; the frontend learns of it from
   `turn_cancelled`.
 
+## As implemented in `session-commands`
+
+Where this list and "Approach" disagree, this list is current.
+
+- **Commands** are as designed, in `src/agent-core/commands.ts`.
+  `parseSessionCommand` refuses unknown fields. Images are strings as
+  providers accept them (data URL or base64), because the terminal holds
+  data URLs; `encodeCommandImage` encodes bytes.
+- **`AgentSession`** (`src/agent-core/session.ts`) takes
+  `runTurn(submission, control)`, where `control` has `abortSignal`,
+  `guidance`, and `emit`. It has `dispatch`, `subscribe`, `settled()`,
+  `running`, `approvalChannel`, and `stop(reason)`.
+- **Events** added by the session: `session_turn_started`,
+  `session_turn_ended` (outcome, result or `{ name, message }`, undelivered
+  guidance), `guidance_queued`, `approval_requested`, `approval_resolved`
+  (the decision, or `withdrawn`). The names differ from the runtime's
+  `turn_*` events, which the CLI's `Agent` does not forward. Events passed
+  through from a turn are not checked for serializability; phase 3 owns that.
+- **`stop(reason)` is not a command.** It is for the process that owns the
+  session. The CLI calls it for any abort other than Escape, so Ctrl+C still
+  reaches the agent as `sigint` and an unanswered message is kept in the
+  saved session. Escape dispatches `interrupt`.
+- **CLI** (`src/cli/turnSession.ts`). `createCliTurnSession` wraps
+  `streamAssistantTurn`; `runInteractiveTurn` and non-interactive mode call
+  its `runTurn`, which dispatches `submit` and waits for
+  `session_turn_ended`. The CLI's own abort controller and exit-code logic
+  are unchanged. In one process the rendered result and the original error
+  object are handed back directly rather than rebuilt from the event.
+  `answerApprovalsThrough` asks the terminal prompt on `approval_requested`
+  and dispatches the answer; a prompt that throws or answers another request
+  results in a deny.
+- **The agent receives `{ text, images }`.** `displayText` and `inputMode`
+  no longer reach it; nothing read them.
+- **`ApprovalChannel` stays in `src/permissions`**; the session's channel
+  matches it structurally, and `agent-core` imports only policy types.
+- **Guard.** There is no boundary test for the rest of `src/agent-core`,
+  which imports `node:crypto` and the trace and tools modules. The a7 guard
+  covers `commands.ts` and `session.ts`.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).
