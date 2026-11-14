@@ -284,8 +284,10 @@ Where this list and "Approach" disagree, this list is current.
   caller limits preview reads. The runtime integrations are
   `describeToolCall` and `describeToolResult` on `AgentIntegrations`.
 - **Preview reads follow read policy.** `Agent` answers `canPreviewRead`
-  with `ToolPermissions.allowsWithoutAsking` for a `read` of that path. It
-  never prompts and is not recorded as the last decision. Where a read would
+  yes only when `read` is enabled, is in the tool scope the call will be
+  authorized against (passed to `describeToolCall` as `scope`), and
+  `ToolPermissions.allowsWithoutAsking` allows a `read` of that path. It
+  never prompts and is not recorded as the last decision (review of #110). Where a read would
   ask or be denied, the payload has no hunks and
   `unavailable: "Not read before approval"`. In `bypass` every file may be
   previewed.
@@ -295,8 +297,18 @@ Where this list and "Approach" disagree, this list is current.
 - **No preview** for a binary file, a directory, or a file over 1 MB. An
   edit that would fail (string not found, ambiguous match) says so in
   `unavailable` before the call runs.
-- **A change to only the final newline has no lines to show.** Lines are
-  compared without their terminators; carriage returns stay in the line.
+- **Line breaks are compared.** Lines are compared with their line breaks;
+  a last line without one is marked `noNewline`, so gaining or losing the
+  final newline shows as `-1 +1`. Carriage returns stay in the line (review
+  of #110).
+- **Byte budgets.** Diff text is capped at 64 KB of UTF-8 across all hunks
+  (`DISPLAY_LIMITS.diffBytes`); a line over what is left is cut at a
+  character boundary and marked `truncated`. The command tail is 16 KB of
+  UTF-8, not of UTF-16 units. Trailing newlines are trimmed by a backward
+  scan (review of #110).
+- **Detached copies.** The describe hooks receive `structuredClone`d
+  arguments, result, and earlier description; presentation code cannot
+  change what is authorized, run, or recorded (review of #110).
 - **Diff limit.** Past an edit distance of 1,000 lines the differing middle
   is shown as one replacement.
 - **A nonzero exit is a result, not an error.** `error` is set on a
