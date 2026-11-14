@@ -207,8 +207,9 @@ remain independent of presentation types.
 The prompt always retains authoritative operation details, including generic/MCP
 arguments, the resolved file path, or the full command/cwd/environment. Only diff
 bodies need an extra rendered preview; command and generic headers would repeat
-or hide these details. The terminal clears its running region before writing the
-approval block. Disposing the answering channel denies every pending request
+or hide these details. The terminal temporarily hides only the matching running call while the
+approval block is open. Its running state is retained; prompt cleanup restores
+visibility only if the call still exists. Other in-flight calls stay visible. Disposing the answering channel denies every pending request
 before aborting its UI so neither the tool nor the session can wait forever.
 
 `formatApprovalRequest` renders the payload collapsed, with a larger cap for
