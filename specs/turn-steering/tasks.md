@@ -49,8 +49,8 @@ Node 20 each time, with no change between attempts:
 Neither test is in code this spec touches. The paste test has now failed
 twice on this spec's branches and not on `main`. The likeliest cause is
 runner load from the real-process tests added here, but that is not
-confirmed. A follow-up that replaces the fixed wait with polling is worth
-proposing to the owner.
+confirmed. It failed a third time on #109's first run; that PR now makes the
+test poll for its result (`c329f61`), as a separate commit.
 
 **Trying the CLI in a real terminal.** For `steering-ui` the built CLI was
 run inside tmux (its own socket, `tmux -L <name>`) with `HOME` pointed at a
