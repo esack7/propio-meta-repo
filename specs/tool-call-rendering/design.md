@@ -227,7 +227,10 @@ the failure is what is shown after.
 - `runWithSpawn` calls it as data arrives, after decoding and before the
   buffer cap. `BashTool` passes it through. Nothing else uses it yet.
 - The runtime turns chunks into `tool_output` events (`toolCallId`, `stream`,
-  `text`), coalesced to at most one per 100 ms per call and 4 KB per event.
+  `text`), coalesced in 100 ms windows per call, at most one event per stream
+  (two per window) with 4 KB combined text. A final flush happens before
+  completion/cancellation. This preserves stream identity without unbounded
+  event counts when stdout and stderr alternate.
   Excess text within a window is dropped from the event, not from the
   result, and the event says how much.
 - The bottom-zone entry for a running command shows the last 5 lines

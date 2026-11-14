@@ -23,7 +23,8 @@ and tested head `d2abc77`. CI passed on Node 20 and Node 24.10.0
 the reviewed and tested head `94d6743`.
 All 2,727 tests and 61 snapshots, build, formatting, and both Fallow checks pass;
 real tmux approval/denial and restored-running-indicator checks pass.
-CI 43620580700 passed on Node 20 and Node 24.10.0. Next slice: `live-output`.
+CI 43620580700 passed on Node 20 and Node 24.10.0. `live-output` is implemented in ready-for-review PR #113 at `6de5b50`.
+Next action: review #113; protocol numbering/replay is the remaining slice.
 Remaining slices: `live-output` and `protocol-events`.
 The worktree and retained slice branches remain available. See
 [delivery.json](delivery.json) for criterion-specific evidence and merge history.
