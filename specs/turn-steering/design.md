@@ -339,7 +339,11 @@ Where this list and "Approach" disagree, this list is current.
 - **Drawing** (`src/ui/turnInputLine.ts`): `ESC D` then cursor-up reserves
   the row below without losing the column, even on the last row; `ESC 7`
   saves the place; the line is drawn one row down and kept to one row;
-  `ESC 8` restores before release. Tried in tmux only.
+  `ESC 8` restores before release. "One row" is counted in terminal cells
+  (`src/ui/displayWidth.ts`, shared with the composer): emoji count as
+  wide, characters are never split, styling sequences are kept. The hold
+  sits under any `write` the spinner installs, and Node's cursor methods
+  run against the wrapper so they are held too. Tried in tmux only.
 - **Keyboard** (`src/ui/turnInput.ts`) replaces `createTurnCancelListener`
   for chat turns; `!` commands keep the old listener. Printable keys,
   Backspace, Ctrl+U, Enter, Escape. No bracketed paste: a pasted newline

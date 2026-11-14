@@ -17,7 +17,7 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 `process-group` (a3), `runtime-steering` (a1, a2, a8), and
 `session-commands` (a4, a7) are merged and verified: propio-agent#106
 (`c33a73f`), #107 (`b7d2061`), and #108 (`783ca4f`). `steering-ui` (a1, a5,
-a6), the last slice, is in review as propio-agent#109; see "Slices" in [design.md](design.md).
+a6), the last slice, is in review as propio-agent#109 after one round of review fixes (`a25ce87`); see "Slices" in [design.md](design.md).
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
