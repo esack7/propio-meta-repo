@@ -14,9 +14,11 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-13)
 
-Planned, nothing started. Five slices in order: `display-payload`,
-`call-renderers`, `approval-display`, `live-output`, `protocol-events`. See
-"Slices" in [design.md](design.md).
+`display-payload` (a8) is in review as propio-agent#110 at `a43efa1`. Next:
+`call-renderers`, started with `start-slice` once #110 has merged. Then
+`approval-display`, `live-output`, `protocol-events`. See "Slices" in
+[design.md](design.md); what the first slice changed from the design is under
+"As implemented in `display-payload`".
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
@@ -31,3 +33,16 @@ four effects were named as disruptive, so none is deferred within this spec.
 [turn-steering/tasks.md](../turn-steering/tasks.md): signed commits, the two
 flaky suites, inline review comments, a failing-first test for each review
 fix, and how to try the CLI in tmux against a stand-in model.
+
+## Baseline checks (2026-11-13, Node 22.23.3)
+
+Run in `specs/tool-call-rendering/repos/propio-agent` at
+`559caa7e5f1856ba9a87e5ba0809258117adf051` (equal to `origin/main`) after a
+fresh `npm ci`.
+
+- `npm run build`: passed.
+- `npm test`: 142 of 143 suites, 2,545 of 2,546 tests passed. The failure was
+  `src/mcp/__tests__/boundary.test.ts`, one of the two known flaky suites; it
+  passed on every later run.
+- `npm run format:check` and `npx fallow audit`: not run at the baseline;
+  both pass on the first slice.

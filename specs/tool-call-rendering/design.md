@@ -263,6 +263,56 @@ streamed assistant text is compared after it has been flushed. The scenario
 has an edit with approval, a failing command with live output, three reads,
 an MCP call, mid-turn guidance, and a denied call.
 
+## As implemented in `display-payload`
+
+Where this list and "Approach" disagree, this list is current.
+
+- **Shape.** `ToolDisplay` is `{ title, body, error? }` in
+  `src/tools/display.ts`. `title` is the activity phrase ("Editing
+  src/a.ts"), so it replaces the old invocation label exactly. `error` is
+  set when the call failed.
+  - `command` has `stdoutTail` and `stderrTail` with `stdoutLines` and
+    `stderrLines`, not one `outputTail`: the shell runner collects the
+    streams separately.
+  - `search` has `mode` (`content`, `files`, `list`), so one body serves
+    `grep`, `find`, and `ls`.
+  - `file_read.range` is `{ start, count? }`.
+  - `diff` adds `baseHash`, `stale`, and `unavailable`.
+- **Describing.** `describeCall(args, context)` and
+  `describeResult(args, result, before)` on `PresentedTool`
+  (`src/tools/interface.ts`). `context.canPreviewRead(rawPath)` is how the
+  caller limits preview reads. The runtime integrations are
+  `describeToolCall` and `describeToolResult` on `AgentIntegrations`.
+- **Preview reads follow read policy.** `Agent` answers `canPreviewRead`
+  with `ToolPermissions.allowsWithoutAsking` for a `read` of that path. It
+  never prompts and is not recorded as the last decision. Where a read would
+  ask or be denied, the payload has no hunks and
+  `unavailable: "Not read before approval"`. In `bypass` every file may be
+  previewed.
+- **Stale previews.** The finished payload keeps the preview's hunks only
+  if `baseHash` equals the `beforeHash` the tool recorded when it ran.
+  Otherwise it has no hunks and `stale: true`.
+- **No preview** for a binary file, a directory, or a file over 1 MB. An
+  edit that would fail (string not found, ambiguous match) says so in
+  `unavailable` before the call runs.
+- **A change to only the final newline has no lines to show.** Lines are
+  compared without their terminators; carriage returns stay in the line.
+- **Diff limit.** Past an edit distance of 1,000 lines the differing middle
+  is shown as one replacement.
+- **A nonzero exit is a result, not an error.** `error` is set on a
+  `command` only when the call itself failed: cancelled, timed out, or
+  refused before it ran.
+- **Labels.** `displayUseLabel` and `displayResultLabel` in `display.ts`
+  derive the two strings the terminal still draws; `Agent.formatRuntimeEvent`
+  uses them. A finished `edit` or `write` now reads `Changed (+3 -1)` or
+  `Created (+12 -0)`. `activityLabel`, `useLabel`, `resultPreview`, and
+  `argumentPreview` stay on the events until `call-renderers`.
+- **`durationMs`** covers the tool's execution only and is 0 for a call that
+  was denied or never ran.
+- **Not done.** No tool event for a call resolved as interrupted, as before.
+  Line counts for `read` are of the text returned to the model, which for a
+  result stored externally is the preview.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json). The
