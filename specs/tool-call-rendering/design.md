@@ -307,8 +307,18 @@ Where this list and "Approach" disagree, this list is current.
   UTF-8, not of UTF-16 units. Trailing newlines are trimmed by a backward
   scan (review of #110).
 - **Detached copies.** The describe hooks receive `structuredClone`d
-  arguments, result, and earlier description; presentation code cannot
-  change what is authorized, run, or recorded (review of #110).
+  arguments, result, and earlier description, and a copy of the tool scope
+  with its own set and copied metadata (metadata that cannot be copied is
+  left out). Presentation code cannot change what is authorized, run, or
+  recorded (review of #110).
+- **The budget is measured, not only raced.** A description is accepted
+  only if it arrived within 250 ms of monotonic time, since the budget
+  timer cannot fire while a hook blocks the event loop (review of #110).
+- **The diff search has a deadline.** Previews give it 50 ms; past it the
+  differing middle is shown as one replacement, which is still a correct
+  diff. The diff works only on the changed region and its context. A 1 MB
+  worst case (500,000 alternating lines) takes about 130 ms, down from
+  560 ms (review of #110).
 - **Diff limit.** Past an edit distance of 1,000 lines the differing middle
   is shown as one replacement.
 - **A nonzero exit is a result, not an error.** `error` is set on a
