@@ -12,12 +12,14 @@ Report completed slice, evidence, remaining scope, next action, and decision nee
 Use `start-slice` to continue authorized work. Run normal `close-spec` only after all
 slices and criteria are verified; worktree cleanup alone does not complete a spec.
 
-## Resuming (updated 2026-11-13)
+## Resuming (updated 2026-11-14)
 
-`process-group` (a3), `runtime-steering` (a1, a2, a8), and
-`session-commands` (a4, a7) are merged and verified: propio-agent#106
-(`c33a73f`), #107 (`b7d2061`), and #108 (`783ca4f`). `steering-ui` (a1, a5,
-a6), the last slice, is in review as propio-agent#109 after one round of review fixes (`a25ce87`); see "Slices" in [design.md](design.md).
+Complete. All four slices are merged and verified: `process-group` (a3) as
+propio-agent#106 (`c33a73f`), `runtime-steering` (a1, a2, a8) as #107
+(`b7d2061`), `session-commands` (a4, a7) as #108 (`783ca4f`), and
+`steering-ui` (a1, a5, a6) as #109 (`559caa7`). The feature worktree was
+closed with `close-spec` on 2026-11-14; branches are retained. Departures
+from the design are under "Slices" in [design.md](design.md).
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
