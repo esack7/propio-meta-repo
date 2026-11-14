@@ -325,6 +325,40 @@ Where this list and "Approach" disagree, this list is current.
   which imports `node:crypto` and the trace and tools modules. The a7 guard
   covers `commands.ts` and `session.ts`.
 
+## As implemented in `steering-ui`
+
+Where this list and "Approach" disagree, this list is current.
+
+- **Output is held while a line is typed.** The design put the line in the
+  bottom zone beside live output. The renderer cannot do that: assistant
+  text streams mid-line and is redrawn in place by cursor movement, and the
+  spinner rewrites its own line. Instead `src/ui/holdableStream.ts` wraps
+  stderr in the retained view; the first typed character starts a hold, and
+  sending or erasing the line releases the held output in order. The turn
+  keeps running.
+- **Drawing** (`src/ui/turnInputLine.ts`): `ESC D` then cursor-up reserves
+  the row below without losing the column, even on the last row; `ESC 7`
+  saves the place; the line is drawn one row down and kept to one row;
+  `ESC 8` restores before release. Tried in tmux only.
+- **Keyboard** (`src/ui/turnInput.ts`) replaces `createTurnCancelListener`
+  for chat turns; `!` commands keep the old listener. Printable keys,
+  Backspace, Ctrl+U, Enter, Escape. No bracketed paste: a pasted newline
+  sends the line. `/` and `!` lines are kept and not sent.
+- **Queued and delivered** are transcript lines, not a bottom-zone entry
+  that moves: `queued ❯ text` when the guide command is accepted, and a
+  user-message line when `guidance_delivered` arrives. The queued line
+  stays in scrollback.
+- **Escape** closes the line and uses the existing cancel path. When the
+  turn ends for any reason, undelivered guidance and the draft are joined
+  with newlines and become the prompt's starting text (`defaultValue`).
+- **Approvals.** `borrowingKeyboard` (`src/cli/turnSession.ts`) suspends
+  the turn input around the approval prompt and resumes it after.
+- **No in-turn footer hint.** No footer is shown during a turn today. The
+  hint is in `/help` and the `guide ❯` label.
+- **Plain mode** has no line; only Escape is read, as before.
+- **Not done.** History, completion, image paste, and `@` file mentions in
+  guidance.
+
 ## Slices
 
 One PR each, in order. Status lives in [delivery.json](delivery.json).

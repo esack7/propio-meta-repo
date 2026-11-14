@@ -100,11 +100,25 @@
         "a5",
         "a6"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
-      "evidence": {},
-      "note": "Turn input reader, queued display, Escape restoring undelivered input, footer hint, README."
+      "status": "review",
+      "branch": "codex/turn-steering-steering-ui",
+      "pr": 109,
+      "evidence": {
+        "a1": {
+          "commit": "65b717c74ad21e420205ecc1902651c5af87faf9",
+          "check": "src/__tests__/interactiveSteering.test.ts 'sends what is typed mid-turn to the model before its next request': through runInteractiveTurn with a real Agent and the retained terminal view, keys typed while a tool call runs are the last user message of the provider's second request. Also tried in tmux against a local stand-in model. npm test passed (143 suites, 2,542 tests); build, format check, and fallow audit passed locally."
+        },
+        "a5": {
+          "commit": "65b717c74ad21e420205ecc1902651c5af87faf9",
+          "check": "src/__tests__/interactiveSteering.test.ts: typing shows a line while the session is still running; Enter writes a queued line; after delivery the text appears again after the queued line and before the answer. src/ui/__tests__/turnInput.test.ts: key-level editing and the line's drawing. Tried in tmux during a running bash call and during streamed text at the bottom of the screen. npm test passed (143 suites, 2,542 tests); build, format check, and fallow audit passed locally."
+        },
+        "a6": {
+          "commit": "65b717c74ad21e420205ecc1902651c5af87faf9",
+          "check": "src/__tests__/interactiveSteering.test.ts 'returns to the prompt on Escape with unsent input, and the session goes on': the turn returns null (no exit), shouldExit is false, the queued line and the draft are restored in order, raw mode is released, and the next message continues with the interrupted call resolved. Tried in tmux: both lines came back in the prompt. npm test passed (143 suites, 2,542 tests); build, format check, and fallow audit passed locally."
+        }
+      },
+      "note": "In review as propio-agent#109. Departure from the design: the turn's output is held while the typed line is on screen, instead of the line living in the bottom zone beside live output; no in-turn footer hint. Listed in design.md.",
+      "start_order": 4
     }
   ]
 }

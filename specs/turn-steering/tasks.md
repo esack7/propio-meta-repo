@@ -17,7 +17,7 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 `process-group` (a3), `runtime-steering` (a1, a2, a8), and
 `session-commands` (a4, a7) are merged and verified: propio-agent#106
 (`c33a73f`), #107 (`b7d2061`), and #108 (`783ca4f`). `steering-ui` (a1, a5,
-a6), the last slice, is in progress; see "Slices" in [design.md](design.md).
+a6), the last slice, is in review as propio-agent#109; see "Slices" in [design.md](design.md).
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
@@ -51,6 +51,14 @@ twice on this spec's branches and not on `main`. The likeliest cause is
 runner load from the real-process tests added here, but that is not
 confirmed. A follow-up that replaces the fixed wait with polling is worth
 proposing to the owner.
+
+**Trying the CLI in a real terminal.** For `steering-ui` the built CLI was
+run inside tmux (its own socket, `tmux -L <name>`) with `HOME` pointed at a
+scratch directory holding `.propio/providers.json` for an Ollama provider,
+`OLLAMA_HOST` pointed at a small local HTTP server that answers `/api/chat`
+with NDJSON, and `--permissions bypass`. `tmux send-keys -l` types text and
+`capture-pane -p` reads the screen. Send the text and Enter as separate
+`send-keys` calls: sent together they are treated as a paste.
 
 ## Baseline checks (2026-11-13, Node 24.11.0)
 
