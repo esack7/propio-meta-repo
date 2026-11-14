@@ -14,11 +14,11 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-13)
 
-`display-payload` (a8) is in review as propio-agent#110 at `a43efa1`. Next:
-`call-renderers`, started with `start-slice` once #110 has merged. Then
-`approval-display`, `live-output`, `protocol-events`. See "Slices" in
-[design.md](design.md); what the first slice changed from the design is under
-"As implemented in `display-payload`".
+`display-payload` (a8) merged 2026-11-14 as propio-agent#110 (`c033045`)
+and is verified. `call-renderers` is next. Then `approval-display`,
+`live-output`, `protocol-events`. See "Slices" in [design.md](design.md); what
+the first slice changed from the design is under "As implemented in
+`display-payload`".
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
