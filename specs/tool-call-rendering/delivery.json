@@ -46,11 +46,12 @@
         "a5",
         "a9"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
+      "status": "implementing",
+      "branch": "codex/tool-call-rendering-call-renderers",
+      "pr": 111,
       "evidence": {},
-      "note": "Per-kind renderers with snapshots, single layout, bottom zone for all calls in flight, /expand and Ctrl+O, removal of ToolCallView and label fields. Covers the after-completion half of a1."
+      "note": "Per-kind renderers with snapshots, single layout, bottom zone for all calls in flight, /expand and Ctrl+O, removal of ToolCallView and label fields. Covers the after-completion half of a1. Resumed 2026-11-14. Draft PR #111 is an early review checkpoint at a34cbac: standalone renderers only; terminal integration, expansion controls, label removal, renderer fidelity, and terminal validation remain. Build, formatting, Fallow changed-file audit, and 148 suites / 2674 tests / 60 snapshots pass. Slice remains implementing; acceptance is not yet verified.",
+      "start_order": 2
     },
     {
       "id": "approval-display",
