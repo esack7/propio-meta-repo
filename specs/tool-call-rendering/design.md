@@ -196,19 +196,20 @@ the mid-turn line editor accepts only guidance.
 
 ### Approval prompt (a1)
 
-The CLI passes an optional `display?: ToolDisplay` alongside the approval
-request to its prompt channel. The session does not compute it: the CLI's
-subscriber keeps the `display` of each `tool_started`
-by `toolCallId` and passes it to the prompt with the request, whose
-`toolCallId` matches. `ApprovalRequest` in `policy` is unchanged, so `policy`
-still imports nothing.
+The runtime passes its existing preview into authorization. The application's
+`ApprovalRequest` envelope (`agent-core/approval.ts`) extends the policy request
+with optional `display?: ToolDisplay`; permissions attaches it only when asking.
+The session forwards this envelope unchanged. This replaces the original CLI-side
+map after review: each frontend gets the same preview, without visibility-event
+forwarding, call-ID correlation, or eager copies. The policy request and engine
+remain independent of presentation types.
 
-Implementation adjustment: keep `approval_requested` itself unchanged in this
-slice; the CLI-only channel carries the correlated preview. This avoids adding
-a presentation dependency to the session. The protocol-events slice will define
-the transport/replay form. Preserve the authoritative command, cwd, environment,
-and resolved file path beside the preview so clipping or a relative display path
-cannot hide the operation being authorized.
+The prompt always retains authoritative operation details, including generic/MCP
+arguments, the resolved file path, or the full command/cwd/environment. Only diff
+bodies need an extra rendered preview; command and generic headers would repeat
+or hide these details. The terminal clears its running region before writing the
+approval block. Disposing the answering channel denies every pending request
+before aborting its UI so neither the tool nor the session can wait forever.
 
 `formatApprovalRequest` renders the payload collapsed, with a larger cap for
 a diff (40 lines), above the reason and the choices. Without a payload it
@@ -372,7 +373,7 @@ them come first and the protocol work, which changes nothing visible, last.
 | --- | --- | --- |
 | `display-payload` | `display.ts`, the diff function, `describeCall` / `describeResult` on every built-in tool, generic fallback and MCP titles, `describeTool` integration, `display` and `durationMs` on tool events. Labels are still drawn, now derived from the payload. | a8 |
 | `call-renderers` | Per-kind renderers with snapshots, the single layout, bottom zone for all calls in flight, `/expand` and Ctrl+O, removal of `ToolCallView`, the display adapter, and the label fields. README. | a1, a3, a4, a5, a9 |
-| `approval-display` | Correlate `display` through the CLI subscriber and pass it alongside the approval request; the prompt renders it. | a1, a9 |
+| `approval-display` | Carry `display` on the application approval envelope; the prompt renders the diff and retains operation details. | a1, a9 |
 | `live-output` | `onOutput` in the execution context and shell runner, `tool_output` events, live tail in the bottom zone through the hold. | a2 |
 | `protocol-events` | `protocol.ts`, conversion, numbering, in-memory log, parser, event-driven turn rendering, replay test, standalone example. | a6, a7 |
 
