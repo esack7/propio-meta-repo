@@ -14,12 +14,14 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 ## Resuming (updated 2026-11-14)
 
-`display-payload` merged as propio-agent#110 and is verified.
-`call-renderers` is implemented and ready for review in propio-agent#111
-at `d2abc77` (includes review round 1 fixes). All local checks pass (149 suites, 2,704 tests, 61 snapshots),
-and the CLI was verified in tmux. Await review/merge, then reconcile delivery
-before starting `approval-display`; `live-output` and `protocol-events` follow.
-See [delivery.json](delivery.json) for criterion-specific evidence.
+`display-payload` (#110) and `call-renderers` (#111) are merged and verified.
+#111 merged on 2026-11-14 as `c8306e4`, with the same tree as the reviewed
+and tested head `d2abc77`. CI passed on Node 20 and Node 24.10.0
+(2,704 tests, 61 snapshots), and the CLI was verified in tmux.
+
+Next slice: `approval-display`, followed by `live-output` and `protocol-events`.
+The worktree and retained slice branches remain available. See
+[delivery.json](delivery.json) for criterion-specific evidence and merge history.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
