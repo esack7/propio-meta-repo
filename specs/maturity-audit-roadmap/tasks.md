@@ -10,11 +10,12 @@ specs listed in [design.md](design.md), each with its own delivery record.
 - [x] Read prior audit, abstraction plan, and traceability reassessment.
 - [x] Audit both repositories: [audit.md](audit.md).
 - [x] Define target primitives, dependency direction, and roadmap: [design.md](design.md).
-- [ ] Owner review of findings 2 and 3 (derived from code, not observed sessions).
+- [x] Owner review of findings 2 and 3 (derived from code, not observed sessions). Finding 2 was addressed by `turn-steering`; the owner confirmed finding 3 from daily use on 2026-11-13.
 - [x] Package layout and second consumer decided (2026-11-11).
 - [x] Remaining open questions answered (2026-11-11).
 - [x] Create the first follow-on spec (`tool-permissions`) with `create-spec`: [tool-permissions](../tool-permissions/requirements.md).
 - [x] Create the phase 2 spec (`turn-steering`): [turn-steering](../turn-steering/requirements.md). Complete 2026-11-14.
+- [x] Create the phase 3 spec (`tool-call-rendering`): [tool-call-rendering](../tool-call-rendering/requirements.md).
 
 ## Baseline checks (2026-11-11, Node 22.23.3)
 
@@ -45,9 +46,12 @@ and note which behaviors are the most disruptive.
 criterion verified, worktree closed. Phase 2,
 [turn-steering](../turn-steering/requirements.md): all four slices merged
 (propio-agent#106–#109), every criterion verified, worktree closed on
-2026-11-14. The next phase is phase 3, `tool-call-rendering` (see
-[design.md](design.md)). Before its spec is created, the owner should confirm
-findings 2 and 3 in a real session (see "Baseline checks" above). The steps below describe how phase 1
+2026-11-14. Phase 3,
+[tool-call-rendering](../tool-call-rendering/requirements.md), is specified
+and planned in five slices; its state is in its own delivery record. The
+owner confirmed finding 3 from daily use on 2026-11-13 and named all four of
+its effects as disruptive. Phase 4, `trace-commands`, has no dependency and
+is the next spec to create. The steps below describe how phase 1
 was started.
 
 1. Read [audit.md](audit.md), then [design.md](design.md). Decisions are in

@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "spec": "tool-call-rendering",
+  "working_agreement": "Requested 2026-11-13: create the spec and proceed as for turn-steering. Implement the planned slices in order and fix in-scope review findings; commit each slice, push its branch, and open its pull request without asking again. The design's proposals are implemented as written and corrected in review. Ask before merging or publishing.",
+  "criteria": {
+    "a1": "An edit or write shows the changed lines before approval and after completion",
+    "a2": "A long-running command shows its output while it runs, and its exit status and duration when it ends",
+    "a3": "A turn with ten tool calls occupies a bounded number of lines until expanded, and the last collapsed result can be expanded in full",
+    "a4": "Rendering of tool calls is identical with thinking shown or hidden; completed calls stay in the transcript and the bottom zone shows every call in flight",
+    "a5": "Snapshot tests cover each renderer, running, succeeded, and failed, at a narrow and a wide terminal width",
+    "a6": "Every event, including display payloads and errors, survives a JSON round trip and carries a per-session sequence number that increases by one",
+    "a7": "A turn rendered from a replayed event log matches the turn rendered live",
+    "a8": "Tools produce the display payload, the runtime forwards it, and the CLI renders it; the execution contract has no presentation member; the payload contract holds no module-level state and passes a guarded-import test; a tool without a payload gets a generic one",
+    "a9": "Text from the model or a tool cannot move the cursor, erase lines, or imitate the approval question in any renderer"
+  },
+  "slices": [
+    {
+      "id": "display-payload",
+      "repo": "propio-agent",
+      "depends_on": [],
+      "criteria": ["a8"],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Payload contract, diff function, describeCall/describeResult on built-in tools, generic fallback, display and durationMs on tool events. Labels still drawn, derived from the payload."
+    },
+    {
+      "id": "call-renderers",
+      "repo": "propio-agent",
+      "depends_on": ["display-payload"],
+      "criteria": ["a1", "a3", "a4", "a5", "a9"],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Per-kind renderers with snapshots, single layout, bottom zone for all calls in flight, /expand and Ctrl+O, removal of ToolCallView and label fields. Covers the after-completion half of a1."
+    },
+    {
+      "id": "approval-display",
+      "repo": "propio-agent",
+      "depends_on": ["call-renderers"],
+      "criteria": ["a1", "a9"],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "The approval prompt renders the payload of the call it asks about. Covers the before-approval half of a1."
+    },
+    {
+      "id": "live-output",
+      "repo": "propio-agent",
+      "depends_on": ["call-renderers"],
+      "criteria": ["a2"],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "onOutput in the execution context and shell runner, tool_output events, live tail through the holdable stream."
+    },
+    {
+      "id": "protocol-events",
+      "repo": "propio-agent",
+      "depends_on": ["approval-display", "live-output"],
+      "criteria": ["a6", "a7"],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "JSON event forms, per-session numbering, in-memory log, parser, event-driven turn rendering, replay test."
+    }
+  ]
+}
