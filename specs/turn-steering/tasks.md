@@ -41,6 +41,18 @@ passes locally. It has not failed on the last five `main` runs, so if it
 fails again on this branch, check whether the new real-process tests are
 slowing the runner before calling it a flake.
 
+**CI on #108.** The run at `1ed1ff9` passed only on its third attempt, on
+Node 20 each time, with no change between attempts:
+1. `src/mcp/__tests__/boundary.test.ts` ("disables a pending connection").
+2. `src/ui/__tests__/chatPromptSession.test.ts` ("pastes an image file
+   path"), the same fixed 150 ms wait that failed on #106.
+
+Neither test is in code this spec touches. The paste test has now failed
+twice on this spec's branches and not on `main`. The likeliest cause is
+runner load from the real-process tests added here, but that is not
+confirmed. A follow-up that replaces the fixed wait with polling is worth
+proposing to the owner.
+
 ## Baseline checks (2026-11-13, Node 24.11.0)
 
 Run in `specs/turn-steering/repos/propio-agent` at
