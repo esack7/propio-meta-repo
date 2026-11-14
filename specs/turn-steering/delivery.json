@@ -73,7 +73,7 @@
         "a4",
         "a7"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/turn-steering-session-commands",
       "pr": 108,
       "evidence": {
@@ -86,7 +86,7 @@
           "check": "src/agent-core/__tests__/session.test.ts 'isolation and boundary (a7)': two sessions in one process do not see each other's guidance, approvals under the same request id, or interrupts; commands.ts and session.ts import only agent-core siblings and policy types, and reference no process, filesystem, network, clock, input stream, or module-level mutable state. src/cli/__tests__/turnSession.test.ts: the CLI submits, interrupts, and answers approvals only through the session. npm test passed (141 suites, 2,519 tests); build, format check, fallow audit, and the examples passed locally."
         }
       },
-      "note": "In review as propio-agent#108. Review round 1 (two P2: byte images lost their type at the provider; settled() from the first event returned the previous turn) fixed in 1ed1ff9. Departures from the design are listed in design.md.",
+      "note": "Merged 2026-11-14 as propio-agent#108 (merge commit 783ca4f0a917db107f4ec1b5b08cae6d8249719a) after one review round with two P2 findings, fixed in 1ed1ff9 and confirmed by re-review. Departures from the design are listed in design.md.",
       "start_order": 3
     },
     {
