@@ -282,8 +282,18 @@ Where this list and "Approach" disagree, this list is current.
 
 - **Commands** are as designed, in `src/agent-core/commands.ts`.
   `parseSessionCommand` refuses unknown fields. Images are strings as
-  providers accept them (data URL or base64), because the terminal holds
-  data URLs; `encodeCommandImage` encodes bytes.
+  providers accept them, normally data URLs. `encodeCommandImage` encodes
+  bytes as a data URL whose type is sniffed as the adapters sniff it, because
+  the pinned Bedrock adapter drops bare base64 and Anthropic labels it PNG
+  (review of #108).
+- **Images in the CLI are handed over as given.** No string form is
+  handled like bytes by every adapter (Ollama's library, for one, expects
+  bare base64, not a data URL). So the command carries data URLs, and the
+  CLI's own runner gives the agent the terminal's original images. A
+  frontend in another process sends data URLs.
+- **Settlement.** `settled()` is replaced before the first event is emitted,
+  so awaiting it from `session_turn_started` waits for that turn (review of
+  #108).
 - **`AgentSession`** (`src/agent-core/session.ts`) takes
   `runTurn(submission, control)`, where `control` has `abortSignal`,
   `guidance`, and `emit`. It has `dispatch`, `subscribe`, `settled()`,

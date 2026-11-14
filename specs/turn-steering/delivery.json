@@ -78,15 +78,15 @@
       "pr": 108,
       "evidence": {
         "a4": {
-          "commit": "4ef805a5f49730afebf5ec46e983690ad70659f3",
-          "check": "src/agent-core/__tests__/session.test.ts 'a steered turn driven by commands alone (a4)': over the real runtime and policy engine, submit, guide, deny an approval with a reason, interrupt, and submit again, each command sent as JSON text and parsed on arrival; the guidance reaches the second request, the denial reason reaches the model, the interrupted call is resolved, nothing runs twice, and every emitted event survives a JSON round trip. 'from another process': a child exchanging only JSON lines steers the same turn. 'command contract': nine valid commands round-trip and fifteen malformed values are refused. npm test passed (140 suites, 2,509 tests); build, format check, fallow audit, and the examples passed locally."
+          "commit": "1ed1ff9c73c3ee51504617697e494bb947733a24",
+          "check": "src/agent-core/__tests__/session.test.ts 'a steered turn driven by commands alone (a4)': over the real runtime and policy engine, submit, guide, deny an approval with a reason, interrupt, and submit again, each command sent as JSON text and parsed on arrival; the guidance reaches the second request, the denial reason reaches the model, the interrupted call is resolved, nothing runs twice, and every emitted event survives a JSON round trip. 'from another process': a child exchanging only JSON lines steers the same turn. 'command contract': nine valid commands round-trip and fifteen malformed values are refused; byte images encode as data URLs of their type. src/__tests__/commandImages.test.ts: a JPEG sent as a JSON command reaches the real Anthropic and Bedrock adapters as a JPEG. npm test passed (141 suites, 2,519 tests); build, format check, fallow audit, and the examples passed locally."
         },
         "a7": {
-          "commit": "4ef805a5f49730afebf5ec46e983690ad70659f3",
-          "check": "src/agent-core/__tests__/session.test.ts 'isolation and boundary (a7)': two sessions in one process do not see each other's guidance, approvals under the same request id, or interrupts; commands.ts and session.ts import only agent-core siblings and policy types, and reference no process, filesystem, network, clock, input stream, or module-level mutable state. src/cli/__tests__/turnSession.test.ts: the CLI submits, interrupts, and answers approvals only through the session. npm test passed (140 suites, 2,509 tests); build, format check, fallow audit, and the examples passed locally."
+          "commit": "1ed1ff9c73c3ee51504617697e494bb947733a24",
+          "check": "src/agent-core/__tests__/session.test.ts 'isolation and boundary (a7)': two sessions in one process do not see each other's guidance, approvals under the same request id, or interrupts; commands.ts and session.ts import only agent-core siblings and policy types, and reference no process, filesystem, network, clock, input stream, or module-level mutable state. src/cli/__tests__/turnSession.test.ts: the CLI submits, interrupts, and answers approvals only through the session. npm test passed (141 suites, 2,519 tests); build, format check, fallow audit, and the examples passed locally."
         }
       },
-      "note": "In review as propio-agent#108. Departures from the design are listed in design.md: session_turn_* event names, string images, AgentSession.stop for host shutdown (Ctrl+C), ApprovalChannel left in src/permissions.",
+      "note": "In review as propio-agent#108. Review round 1 (two P2: byte images lost their type at the provider; settled() from the first event returned the previous turn) fixed in 1ed1ff9. Departures from the design are listed in design.md.",
       "start_order": 3
     },
     {
