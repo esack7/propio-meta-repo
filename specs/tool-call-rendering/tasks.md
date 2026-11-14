@@ -19,9 +19,11 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 and tested head `d2abc77`. CI passed on Node 20 and Node 24.10.0
 (2,704 tests, 61 snapshots), and the CLI was verified in tmux.
 
-`approval-display` is implemented in ready-for-review PR #112 at `94d6743` after the review fixes and running-indicator follow-up.
+`approval-display` (#112) merged and is verified at `76b7551`, whose tree matches
+the reviewed and tested head `94d6743`.
 All 2,727 tests and 61 snapshots, build, formatting, and both Fallow checks pass;
-real tmux approval/denial checks pass. Next action: review and merge #112.
+real tmux approval/denial and restored-running-indicator checks pass.
+CI 43620580700 passed on Node 20 and Node 24.10.0. Next slice: `live-output`.
 Remaining slices: `live-output` and `protocol-events`.
 The worktree and retained slice branches remain available. See
 [delivery.json](delivery.json) for criterion-specific evidence and merge history.

@@ -84,7 +84,7 @@
         "a1",
         "a9"
       ],
-      "status": "review",
+      "status": "verified",
       "branch": "codex/tool-call-rendering-approval-display",
       "pr": 112,
       "evidence": {
@@ -97,7 +97,7 @@
           "check": "Review head: 149 suites, 2720 tests, 61 snapshots passed; build, format:check, fallow:audit and fallow:check passed. turnSession.test.ts covers preview before mutation, allow/deny with visibility on/off, session event JSON round trips without broad visibility forwarding, preview without tool ID, disposing with a pending request and ignoring a late allow. approvalPrompt.test.ts covers 40-line diffs, retained path and all argument targets, one command, hostile text in a rendered diff, and live-region clearing before prompt output. render.test.ts covers invalid/NaN/infinite caps. Argument/command/cap regressions fail on original implementation; disposal regression times out with the original disposer and passes with the fix. Real tmux shows exactly one diff before the answer; deny preserves original file. Earlier acceptance check verified mutation and matching completion hunks. GitHub CI 43619655322 passed every job on Node 20 and Node 24.10.0 at this head. Follow-up head: 149 suites, 2727 tests, 61 snapshots passed, plus build/format/both Fallow checks. New toolDisplayIntegration regressions fail before the fix and pass afterward: matching call hidden but still running, other calls visible, restore while running, no resurrection after finish. approvalPrompt tests cover cleanup on allow, deny, withdrawal and IO failure. Real tmux slow command: no live duplicate at question, indicator restored during 15-second command, normal final result. GitHub CI 43620580700 passed every job on Node 20 and Node 24.10.0 at 94d6743."
         }
       },
-      "note": "PR #112 ready for review. All eight owner findings addressed in 29cd0ae: arguments preserved; pending approvals denied on disposal; broad visibility forwarding removed; running region cleared before prompt; application request carries preview directly; no eager clone; one command; safe collapsed limits. Application envelope replaces CLI map after review; policy remains independent. Not merged. Follow-up 4574826221 fixed in 94d6743: hide only the approval call without removing its running state; restore on prompt closure, preserve unrelated calls, and never resurrect completed calls.",
+      "note": "PR #112 merged and verified. All eight owner findings addressed in 29cd0ae: arguments preserved; pending approvals denied on disposal; broad visibility forwarding removed; running region cleared before prompt; application request carries preview directly; no eager clone; one command; safe collapsed limits. Application envelope replaces CLI map after review; policy remains independent. Merged 2026-11-14 at 17:24:57Z as 76b7551a04d99a891a8e0e0be05cb87fbec0a474. GitHub confirms head 94d6743881df421b9811bf14a3420ef6c4f599f3; merge is on fetched origin/main and its tree equals the tested head. CI 43620580700 passed all jobs. Follow-up 4574826221 fixed in 94d6743: hide only the approval call without removing its running state; restore on prompt closure, preserve unrelated calls, and never resurrect completed calls.",
       "start_order": 3
     },
     {
