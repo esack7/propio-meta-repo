@@ -16,7 +16,7 @@ slices and criteria are verified; worktree cleanup alone does not complete a spe
 
 `display-payload` merged as propio-agent#110 and is verified.
 `call-renderers` is implemented and ready for review in propio-agent#111
-at `666bab5`. All local checks pass (149 suites, 2,691 tests, 60 snapshots),
+at `754c1f8` (includes obsolete formatter/color cleanup and updated tests). All local checks pass (149 suites, 2,689 tests, 60 snapshots),
 and the CLI was verified in tmux. Await review/merge, then reconcile delivery
 before starting `approval-display`; `live-output` and `protocol-events` follow.
 See [delivery.json](delivery.json) for criterion-specific evidence.
