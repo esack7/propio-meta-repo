@@ -47,19 +47,21 @@ Proposed syntax:
 `<run>` is an exact run ID in the current workspace's trace root, not an arbitrary
 path or an implicit prefix search. Optional session ID disambiguates duplicates.
 Reject traversal IDs; do not follow discovered journal links outside the root.
+Unscoped selection skips symlinked sessions; explicit selection of one is refused.
 List defaults to the newest 20 runs, with a positive limit capped at 1000 and stable
 ID tie-breaking. Review refinement: probe up to 64 KiB of each first record for
 ordering, then fully inspect only selected rows. Expose listed_runs inspection
-scope, mark overall completeness false for uninspected runs, and count all
-nonreturned journals in omitted so total equals returned plus omitted. Report
+scope, base completeness on actual read/capture warnings rather than ordinary
+limit truncation, and count all nonreturned journals in omitted so total equals returned plus omitted. Report
 corrupt/unreadable entries and completeness without
 silently presenting partial results as complete. Tests determine expected behavior
 for empty roots, duplicate IDs, invalid limits and racing/in-progress journals.
 
 Show prints identity/capture summary followed by event sequence order with stable
 relative timing, operation/request/attempt relationships, policy decisions and
-measurement summaries. Missing times/tokens are unknown, not zero. Reuse
-`visibleText` and existing width helpers. Render bounded previews; do not load full
+measurement summaries. Prefer paired monotonic timing; an unpaired terminal
+event may use a finite nonnegative payload duration. Missing times/tokens are
+unknown, not zero. Reuse `visibleText` and existing width helpers. Render bounded previews; do not load full
 captured prompts, responses or workspace material just to show a timeline. JSON
 is a documented versioned result object, not terminal text with ANSI removed.
 Command errors go to stderr; JSON success stdout is one object. Exit 0 for a
