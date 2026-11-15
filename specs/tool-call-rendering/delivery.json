@@ -132,11 +132,21 @@
         "a6",
         "a7"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
-      "evidence": {},
-      "note": "JSON event forms, per-session numbering, in-memory log, parser, event-driven turn rendering, replay test."
+      "status": "review",
+      "branch": "codex/tool-call-rendering-protocol-events",
+      "pr": 114,
+      "evidence": {
+        "a6": {
+          "commit": "b3b3cb85d55b761af64cacc124dbed223d0cc683",
+          "check": "protocol.test.ts validates malformed fields/variants/numbers, cyclic/deep/accessor inputs, non-JSON argument replacement counts, prompt-plan reduction, immutable cursor logs, per-session sequence seeds across turns, reentrant dispatch and throwing listeners. Full local suite: 154 suites, 2771 tests, 61 unchanged snapshots; build, format:check, fallow:audit against origin/main, fallow:check pass. Standalone public-package example passes without credentials. GitHub CI 43659536878 passed every job at this head on Node 20 and Node 24.10.0."
+        },
+        "a7": {
+          "commit": "b3b3cb85d55b761af64cacc124dbed223d0cc683",
+          "check": "replaySession.test.ts records a mixed CLI turn at 80 columns: approved edit, failing command with transient output, three reads, MCP-style call, guidance and denial. JSON-decoded replay matches the live transcript with tool visibility on/off, using the shared approval formatter callback; tools run only live. Failed/cancelled turns followed by another turn also match, preserving original errors. Invalid/reordered recordings fail before output. Existing renderer snapshots unchanged. Full local suite and all required checks pass. GitHub CI 43659536878 passed every job at this head on Node 20 and Node 24.10.0."
+        }
+      },
+      "note": "PR #114 open, non-draft, at b3b3cb8. Final implementation slice; review and merge verification remain. Compatibility: typed subscribe retained; subscribeProtocol exposes numbered JSON envelopes. Replay approval presentation stays host-owned and never opens a keyboard prompt. Log is unbounded and in-memory; durable/shared-trace numbering remains session-stores. CI 43659536878 passed all jobs on Node 20 and Node 24.10.0 at b3b3cb8.",
+      "start_order": 5
     }
   ]
 }

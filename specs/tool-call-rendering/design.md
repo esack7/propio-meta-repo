@@ -449,3 +449,32 @@ the tmux method in [turn-steering/tasks.md](../turn-steering/tasks.md).
   proves inadequate, as the roadmap says of the renderer in general.
 - **Number events in the runtime.** Rejected: the session adds its own
   events between the runtime's, and one counter must cover both.
+
+## As implemented in `protocol-events`
+
+- Compatibility adjustment: `subscribe` retains typed in-process events;
+  `subscribeProtocol` provides numbered JSON envelopes. CLI sessions now forward
+  visibility and text events through the session. Original return values and
+  error identities are preserved for in-process callers.
+- `normalizeSessionEvent` and strict Zod schemas handle runtime conversion.
+  Non-JSON arguments use stable diagnostic strings, counted in `replacedValues`.
+  The schema discriminator set is checked against core/session event unions by
+  TypeScript. Generic runner events use an explicit `custom` variant.
+- Numbering and the optional synchronous append happen before queued fan-out.
+  Reentrant subscribers cannot invert delivery order. Records are detached and
+  deeply frozen; a fresh cursor array cannot alter the stored log. A throwing
+  listener still allows remaining listeners and queued events to be delivered,
+  then fails the emitting turn. The unbounded in-memory log is intentionally
+  provisional; durable storage and shared trace numbering remain session-stores.
+- `createTurnEventRenderer` is extracted from the existing renderer; both live
+  streaming and `replaySession` consume normalized event bodies. Replay validates
+  the complete recording before output and can omit transient progress. Hosts
+  present approval previews through an event callback and the existing shared
+  formatter; replay never opens keyboard prompts or executes tools.
+- A scripted CLI integration records the full acceptance scenario with tools
+  visible and hidden, then compares JSON-decoded replay transcripts at 80 columns.
+  Additional checks cover failed/cancelled turns followed by another turn and
+  malformed or reordered recordings. Existing renderer snapshots are unchanged.
+- The standalone `example:session-protocol` uses public package imports without
+  credentials. `docs/session-protocol.md` documents errors, ordering, normalization,
+  cursor semantics, compatibility, and replay's host-owned approval UI.
