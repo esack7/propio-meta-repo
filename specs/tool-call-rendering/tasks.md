@@ -28,7 +28,7 @@ CI 43620580700 passed on Node 20 and Node 24.10.0.
 `live-output` (#113) merged and is verified at `840c4e5`, whose tree matches
 reviewed head `365dd39`. CI 43628336617 passed on Node 20 and Node 24.10.0:
 2,742 tests and 61 snapshots. Merge recorded at 2026-11-15 00:28:01 UTC.
-`protocol-events` is implemented in ready-for-review PR #114 at `a66a54b` after addressing the owner review and follow-up findings.
+`protocol-events` is implemented in ready-for-review PR #114 at `2232491` after addressing the owner review and follow-up findings.
 Local validation passed: 154 suites, 2,771 tests, 61 unchanged snapshots,
 build, formatting, both Fallow checks, and the standalone protocol example.
 CI 43659536878 passed all jobs on Node 20 and Node 24.10.0.
@@ -39,6 +39,9 @@ Final-head CI 43661129754 passed all jobs on Node 20 and Node 24.10.0.
 Latest follow-up: one warning summary per turn and all core/session shape fixtures.
 Local full rerun: 155 suites, 2,817 tests, 61 snapshots; all required checks pass.
 Final-head CI 43670845198 passed every job on Node 20 and Node 24.10.0.
+Latest gaps fixed: all 22 non-custom fixtures and immediate between-turn diagnostics.
+Local full suite: 155 suites, 2,821 tests, 61 snapshots; all checks pass.
+Final-head CI 43675239626 passed every job on Node 20 and Node 24.10.0.
 No implementation slices remain; PR review and merge verification are pending.
 The worktree and retained slice branches remain available. See
 [delivery.json](delivery.json) for criterion-specific evidence and merge history.

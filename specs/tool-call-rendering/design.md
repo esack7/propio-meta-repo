@@ -511,3 +511,13 @@ warnings and each turn emits one summary, preserving the provider error. Fixture
 cover all 19 core/session runtime shapes and match the schema discriminator list;
 each normalizes without a custom wrapper and survives a parsed JSON round trip.
 A temporary tool_started field rename proves the fixture catches field drift.
+
+### Protocol remaining gaps (2232491)
+
+Fixture coverage includes all 22 non-custom variants: application mode/plan events
+use the Agent visibility type, while renderer-owned context_stats uses its protocol
+shape. Only custom is excluded from the schema coverage comparison. Diagnostics
+between turns flush immediately. Active CLI calls retain a single summary through
+terminal lifecycle delivery, so errors at turn end do not split the summary.
+The idle approval request/answer regression proves immediate reporting and no
+carryover into the next turn; existing streamed-turn warning tests stay green.
