@@ -1,7 +1,7 @@
 {
   "version": 1,
   "spec": "trace-commands",
-  "working_agreement": "User asked to continue with the proposed next step: create the trace-commands spec for propio-agent. This turn is planning only. Preserve prior authorization for commits/pushes/PR preparation when implementation is requested; ask before merging, publishing or paid provider calls. Do not start implementation merely from this record.",
+  "working_agreement": "User authorized implementation of trace-commands, beginning with trace-cli, through validation, commits, pushes and a ready PR for review. Continue in-scope fixes without repeated confirmation. Ask before merging, publishing or paid provider calls.",
   "criteria": {
     "a1": "Offline workspace-scoped trace discovery and run selection without provider startup",
     "a2": "Deterministic escaped timeline with outcomes, relationships and completeness",
@@ -24,11 +24,29 @@
         "a3",
         "a9"
       ],
-      "status": "planned",
-      "branch": null,
-      "pr": null,
-      "evidence": {},
-      "note": "Scope, acceptance and risk-specific validation in design.md."
+      "status": "review",
+      "branch": "codex/trace-commands-trace-cli",
+      "pr": 115,
+      "evidence": {
+        "a1": {
+          "commit": "993666e1a00750d7a4871fd5b56140385af2a5b9",
+          "check": "traceCommand.test.ts and traceStartup.test.ts: exact IDs, session ambiguity, workspace isolation, empty/corrupt/unreadable journals, symlink rejection; process commands succeed without credentials and with invalid provider/MCP/settings files. Full suite: 157 suites, 2867 tests, 65 snapshots; focused final: 46 tests/4 snapshots; build, format, Fallow audit --base origin/main and Fallow check passed on Node 22.23.3/npm 10.9.9. CI 43677706773 passed all jobs, including Node 20/24.10.0 and required gate; Fallow also passed locally from an unbuilt checkout."
+        },
+        "a2": {
+          "commit": "993666e1a00750d7a4871fd5b56140385af2a5b9",
+          "check": "traceCommand.test.ts: four timeline snapshots (completed/failed/cancelled/incomplete), retry relationships, partial usage, unknown tokens/times, escaping and widths. Built CLI PTY smoke passed at 40/120 columns. Full suite: 157 suites, 2867 tests, 65 snapshots; focused final: 46 tests/4 snapshots; build, format, Fallow audit --base origin/main and Fallow check passed on Node 22.23.3/npm 10.9.9. CI 43677706773 passed all jobs, including Node 20/24.10.0 and required gate; Fallow also passed locally from an unbuilt checkout."
+        },
+        "a3": {
+          "commit": "993666e1a00750d7a4871fd5b56140385af2a5b9",
+          "check": "traceCommand.test.ts and traceStartup.test.ts: default standard versus explicit full export, destination no-overwrite including symlinks, partial JSONL export, valid bundles and nonzero tamper verification. Built CLI list/export/verify smoke passed. Full suite: 157 suites, 2867 tests, 65 snapshots; focused final: 46 tests/4 snapshots; build, format, Fallow audit --base origin/main and Fallow check passed on Node 22.23.3/npm 10.9.9. CI 43677706773 passed all jobs, including Node 20/24.10.0 and required gate; Fallow also passed locally from an unbuilt checkout."
+        },
+        "a9": {
+          "commit": "993666e1a00750d7a4871fd5b56140385af2a5b9",
+          "check": "README command syntax/JSON schema/exit behavior and CLI help; credential-free source process tests and built bin/propio.cjs smoke passed. Capture alias migration and in-session/shell docs remain in later slices. Full suite: 157 suites, 2867 tests, 65 snapshots; focused final: 46 tests/4 snapshots; build, format, Fallow audit --base origin/main and Fallow check passed on Node 22.23.3/npm 10.9.9. CI 43677706773 passed all jobs, including Node 20/24.10.0 and required gate; Fallow also passed locally from an unbuilt checkout."
+        }
+      },
+      "note": "Ready PR #115 awaits review and merge; all local and GitHub CI checks passed at recorded head (run 43677706773). Reconcile exact-head merge evidence before advancing. Remaining four slices are planned; a9 is only partially covered by this slice.",
+      "start_order": 1
     },
     {
       "id": "pricing",
