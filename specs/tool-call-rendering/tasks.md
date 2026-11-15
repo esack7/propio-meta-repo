@@ -12,39 +12,20 @@ Report completed slice, evidence, remaining scope, next action, and decision nee
 Use `start-slice` to continue authorized work. Run normal `close-spec` only after all
 slices and criteria are verified; worktree cleanup alone does not complete a spec.
 
-## Resuming (updated 2026-11-14)
+## Delivery complete (2026-11-15)
 
-`display-payload` (#110) and `call-renderers` (#111) are merged and verified.
-#111 merged on 2026-11-14 as `c8306e4`, with the same tree as the reviewed
-and tested head `d2abc77`. CI passed on Node 20 and Node 24.10.0
-(2,704 tests, 61 snapshots), and the CLI was verified in tmux.
+All five slices are merged and verified: `display-payload` (#110),
+`call-renderers` (#111), `approval-display` (#112), `live-output` (#113),
+and `protocol-events` (#114). All nine acceptance criteria have recorded evidence.
 
-`approval-display` (#112) merged and is verified at `76b7551`, whose tree matches
-the reviewed and tested head `94d6743`.
-All 2,727 tests and 61 snapshots, build, formatting, and both Fallow checks pass;
-real tmux approval/denial and restored-running-indicator checks pass.
-CI 43620580700 passed on Node 20 and Node 24.10.0.
+#114 merged at 2026-11-15 04:09:03 UTC as `feceea2`, whose tree matches
+reviewed head `2232491`. Final-head CI 43675239626 passed every job on
+Node 20 and Node 24.10.0: 155 suites, 2,821 tests, and 61 snapshots.
+Build, formatting, both Fallow checks and the earlier standalone example pass.
 
-`live-output` (#113) merged and is verified at `840c4e5`, whose tree matches
-reviewed head `365dd39`. CI 43628336617 passed on Node 20 and Node 24.10.0:
-2,742 tests and 61 snapshots. Merge recorded at 2026-11-15 00:28:01 UTC.
-`protocol-events` is implemented in ready-for-review PR #114 at `2232491` after addressing the owner review and follow-up findings.
-Local validation passed: 154 suites, 2,771 tests, 61 unchanged snapshots,
-build, formatting, both Fallow checks, and the standalone protocol example.
-CI 43659536878 passed all jobs on Node 20 and Node 24.10.0.
-Review regressions and updated evidence are recorded in delivery.json.
-Follow-up local validation: 154 suites, 2,795 tests, 61 snapshots and all checks pass.
-CI 43670173137 passed every job at c56e09e on Node 20 and Node 24.10.0.
-Final-head CI 43661129754 passed all jobs on Node 20 and Node 24.10.0.
-Latest follow-up: one warning summary per turn and all core/session shape fixtures.
-Local full rerun: 155 suites, 2,817 tests, 61 snapshots; all required checks pass.
-Final-head CI 43670845198 passed every job on Node 20 and Node 24.10.0.
-Latest gaps fixed: all 22 non-custom fixtures and immediate between-turn diagnostics.
-Local full suite: 155 suites, 2,821 tests, 61 snapshots; all checks pass.
-Final-head CI 43675239626 passed every job on Node 20 and Node 24.10.0.
-No implementation slices remain; PR review and merge verification are pending.
-The worktree and retained slice branches remain available. See
-[delivery.json](delivery.json) for criterion-specific evidence and merge history.
+No implementation or review work remains in this spec. Worktrees and retained
+slice branches remain available; worktree cleanup is a separate milestone.
+See [delivery.json](delivery.json) for criterion-specific evidence and merge history.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
 slices in order and fix in-scope review findings; commit, push, and open each
