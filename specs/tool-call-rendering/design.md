@@ -478,3 +478,16 @@ the tmux method in [turn-steering/tasks.md](../turn-steering/tasks.md).
 - The standalone `example:session-protocol` uses public package imports without
   credentials. `docs/session-protocol.md` documents errors, ordering, normalization,
   cursor semantics, compatibility, and replay's host-owned approval UI.
+
+### Protocol review corrections (1578ede)
+
+These replace the earlier failure semantics: log and observer failures are isolated
+from turn execution and reported through `onProtocolError`. A failed append detaches
+the log while live delivery continues; raw delivery and CLI completion survive
+normalization/sequence failures. Generic event-name collisions use custom envelopes.
+The session returns its normalized body to the renderer and marks immutable records
+for validation reuse by the in-memory log. Existing logs expose `lastSequence` for
+session recreation, and cursor reads slice by offset. Protocol modules participate
+in import/no-I/O boundary tests, with Zod explicitly allowed. The earlier statement
+that a cast enforces exhaustive schema coverage has been removed from source;
+strict schema validation belongs to the untrusted parser.
