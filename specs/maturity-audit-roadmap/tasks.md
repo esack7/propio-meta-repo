@@ -46,9 +46,9 @@ and note which behaviors are the most disruptive.
 (#102–#105), `turn-steering` (#106–#109), and `tool-call-rendering` (#110–#114)
 have verified delivery records and closed worktrees. Phase 4,
 [trace-commands](../trace-commands/requirements.md), is now specified and planned
-in five slices for `propio-agent`. The `trace-cli` slice is implemented in ready
-PR [#115](https://github.com/esack7/propio-agent/pull/115); review and merge
-reconciliation precede the remaining slices. Follow its
+in five slices for `propio-agent`. The `trace-cli` slice is verified after
+PR [#115](https://github.com/esack7/propio-agent/pull/115) merged; `pricing` is next,
+with four slices remaining. The feature worktree is retained. Follow its
 [design](../trace-commands/design.md) and [delivery record](../trace-commands/delivery.json).
 The historical steps below describe how phase 1 was started.
 
