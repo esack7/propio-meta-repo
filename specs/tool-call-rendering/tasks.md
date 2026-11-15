@@ -23,9 +23,12 @@ and tested head `d2abc77`. CI passed on Node 20 and Node 24.10.0
 the reviewed and tested head `94d6743`.
 All 2,727 tests and 61 snapshots, build, formatting, and both Fallow checks pass;
 real tmux approval/denial and restored-running-indicator checks pass.
-CI 43620580700 passed on Node 20 and Node 24.10.0. `live-output` is implemented in ready-for-review PR #113 at `365dd39` after review fixes and the skipped-tail follow-up.
-Next action: review #113; protocol numbering/replay is the remaining slice.
-Remaining slices: `live-output` and `protocol-events`.
+CI 43620580700 passed on Node 20 and Node 24.10.0.
+
+`live-output` (#113) merged and is verified at `840c4e5`, whose tree matches
+reviewed head `365dd39`. CI 43628336617 passed on Node 20 and Node 24.10.0:
+2,742 tests and 61 snapshots. Merge recorded at 2026-11-15 00:28:01 UTC.
+Next and remaining slice: `protocol-events` (event numbering and replay).
 The worktree and retained slice branches remain available. See
 [delivery.json](delivery.json) for criterion-specific evidence and merge history.
 
