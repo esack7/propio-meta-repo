@@ -23,8 +23,9 @@ reviewed head `2232491`. Final-head CI 43675239626 passed every job on
 Node 20 and Node 24.10.0: 155 suites, 2,821 tests, and 61 snapshots.
 Build, formatting, both Fallow checks and the earlier standalone example pass.
 
-No implementation or review work remains in this spec. Worktrees and retained
-slice branches remain available; worktree cleanup is a separate milestone.
+No implementation or review work remains in this spec. Worktree cleanup completed
+through close-spec on 2026-11-15 after remote merge/evidence preflight. All retained
+slice branches and specification documents remain available.
 See [delivery.json](delivery.json) for criterion-specific evidence and merge history.
 
 **Working agreement** (also in [delivery.json](delivery.json)): implement the
