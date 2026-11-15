@@ -501,3 +501,13 @@ custom events. A temporary unmatched core variant confirmed the build fails at
 this constraint. The protocol guide now explicitly states that omitted events
 have no stream marker, so a missing terminal event leaves replay completion
 unknown; it also documents the provisional `emit` return-value change.
+
+### Protocol second follow-up (a66a54b)
+
+Default CLI diagnostics collect failures and emit one escaped summary after each
+turn, including suppressed repeats. Custom handlers still receive each error.
+Successful/failed-turn regressions verify twenty deltas never trigger mid-answer
+warnings and each turn emits one summary, preserving the provider error. Fixtures
+cover all 19 core/session runtime shapes and match the schema discriminator list;
+each normalizes without a custom wrapper and survives a parsed JSON round trip.
+A temporary tool_started field rename proves the fixture catches field drift.
