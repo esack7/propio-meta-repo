@@ -48,7 +48,11 @@ Proposed syntax:
 path or an implicit prefix search. Optional session ID disambiguates duplicates.
 Reject traversal IDs; do not follow discovered journal links outside the root.
 List defaults to the newest 20 runs, with a positive limit capped at 1000 and stable
-ID tie-breaking. Report corrupt/unreadable entries and completeness without
+ID tie-breaking. Review refinement: probe up to 64 KiB of each first record for
+ordering, then fully inspect only selected rows. Expose listed_runs inspection
+scope, mark overall completeness false for uninspected runs, and count all
+nonreturned journals in omitted so total equals returned plus omitted. Report
+corrupt/unreadable entries and completeness without
 silently presenting partial results as complete. Tests determine expected behavior
 for empty roots, duplicate IDs, invalid limits and racing/in-progress journals.
 
@@ -63,10 +67,13 @@ successful read (with explicit completeness warnings), nonzero for selection,
 I/O, usage or verification errors. Verify reports findings as data as well as
 setting its exit status.
 
-Export uses `exportTraceJournal`; verify uses `verifyTraceExport`. Export requires
+Export uses the trace API’s `exportTraceReadResult` (also used by
+`exportTraceJournal`); verify uses `verifyTraceExport`. Export requires
 an explicit new destination, standard capture by default and `--full` for captured
 private material. Do not silently overwrite or reinterpret a corrupt bundle.
-Reuse existing redaction and traversal protections, supplementing CLI tests where
+Export the already-validated read result so appends and path replacement cannot
+change the exported events. Reuse existing redaction and traversal protections,
+supplementing CLI tests where
 argument routing introduces a boundary. No network or tool execution in any of
 these commands.
 
