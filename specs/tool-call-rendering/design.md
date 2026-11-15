@@ -491,3 +491,13 @@ session recreation, and cursor reads slice by offset. Protocol modules participa
 in import/no-I/O boundary tests, with Zod explicitly allowed. The earlier statement
 that a cast enforces exhaustive schema coverage has been removed from source;
 strict schema validation belongs to the untrusted parser.
+
+### Protocol follow-up (c56e09e)
+
+Production CLI sessions supply a default escaped terminal warning for protocol
+errors; an explicit handler overrides it. A generic type constraint checks that
+core/session discriminator unions fit the schema union while preserving generic
+custom events. A temporary unmatched core variant confirmed the build fails at
+this constraint. The protocol guide now explicitly states that omitted events
+have no stream marker, so a missing terminal event leaves replay completion
+unknown; it also documents the provisional `emit` return-value change.
