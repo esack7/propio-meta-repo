@@ -15,7 +15,8 @@ specs listed in [design.md](design.md), each with its own delivery record.
 - [x] Remaining open questions answered (2026-11-11).
 - [x] Create the first follow-on spec (`tool-permissions`) with `create-spec`: [tool-permissions](../tool-permissions/requirements.md).
 - [x] Create the phase 2 spec (`turn-steering`): [turn-steering](../turn-steering/requirements.md). Complete 2026-11-14.
-- [x] Create the phase 3 spec (`tool-call-rendering`): [tool-call-rendering](../tool-call-rendering/requirements.md).
+- [x] Create the phase 3 spec (`tool-call-rendering`): [tool-call-rendering](../tool-call-rendering/requirements.md). Complete and worktree closed 2026-11-15.
+- [x] Create the phase 4 spec (`trace-commands`): [trace-commands](../trace-commands/requirements.md). Five implementation slices planned.
 
 ## Baseline checks (2026-11-11, Node 22.23.3)
 
@@ -41,18 +42,14 @@ and note which behaviors are the most disruptive.
 
 ## Starting the next session
 
-**Current (2026-11-14):** phases 1 and 2 are complete. Phase 1,
-`tool-permissions`: all four slices merged (propio-agent#102–#105), every
-criterion verified, worktree closed. Phase 2,
-[turn-steering](../turn-steering/requirements.md): all four slices merged
-(propio-agent#106–#109), every criterion verified, worktree closed on
-2026-11-14. Phase 3,
-[tool-call-rendering](../tool-call-rendering/requirements.md), is specified
-and planned in five slices; its state is in its own delivery record. The
-owner confirmed finding 3 from daily use on 2026-11-13 and named all four of
-its effects as disruptive. Phase 4, `trace-commands`, has no dependency and
-is the next spec to create. The steps below describe how phase 1
-was started.
+**Current (2026-11-15):** phases 1–3 are complete. `tool-permissions`
+(#102–#105), `turn-steering` (#106–#109), and `tool-call-rendering` (#110–#114)
+have verified delivery records and closed worktrees. Phase 4,
+[trace-commands](../trace-commands/requirements.md), is now specified and planned
+in five slices for `propio-agent`. Its next implementation step is prepare-spec,
+then start-slice `trace-cli`; no implementation worktree exists yet. Follow its
+[design](../trace-commands/design.md) and [delivery record](../trace-commands/delivery.json).
+The historical steps below describe how phase 1 was started.
 
 1. Read [audit.md](audit.md), then [design.md](design.md). Decisions are in
    [requirements.md](requirements.md) and are settled; do not reopen them.

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "spec": "trace-commands",
+  "working_agreement": "User asked to continue with the proposed next step: create the trace-commands spec for propio-agent. This turn is planning only. Preserve prior authorization for commits/pushes/PR preparation when implementation is requested; ask before merging, publishing or paid provider calls. Do not start implementation merely from this record.",
+  "criteria": {
+    "a1": "Offline workspace-scoped trace discovery and run selection without provider startup",
+    "a2": "Deterministic escaped timeline with outcomes, relationships and completeness",
+    "a3": "Safe explicit export and verifiable bundles through existing APIs",
+    "a4": "Versioned sourced pricing with correct unknown and partial-cost semantics",
+    "a5": "In-session trace and usage match offline inspection across foreground, summaries and retries",
+    "a6": "Capture flag/settings/env precedence and sandbox forwarding",
+    "a7": "Actionable failure trace hints preserve original errors and JSON output",
+    "a8": "Operator shell journal lifecycle including denial, cancellation and capture failures",
+    "a9": "Documented workflow, visibility alias migration and credential-free CLI acceptance"
+  },
+  "slices": [
+    {
+      "id": "trace-cli",
+      "repo": "propio-agent",
+      "depends_on": [],
+      "criteria": [
+        "a1",
+        "a2",
+        "a3",
+        "a9"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Scope, acceptance and risk-specific validation in design.md."
+    },
+    {
+      "id": "pricing",
+      "repo": "propio-agent",
+      "depends_on": [
+        "trace-cli"
+      ],
+      "criteria": [
+        "a4"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Scope, acceptance and risk-specific validation in design.md."
+    },
+    {
+      "id": "capture-settings",
+      "repo": "propio-agent",
+      "depends_on": [
+        "trace-cli"
+      ],
+      "criteria": [
+        "a6",
+        "a9"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Scope, acceptance and risk-specific validation in design.md."
+    },
+    {
+      "id": "session-inspection",
+      "repo": "propio-agent",
+      "depends_on": [
+        "trace-cli",
+        "pricing",
+        "capture-settings"
+      ],
+      "criteria": [
+        "a5",
+        "a7",
+        "a9"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Scope, acceptance and risk-specific validation in design.md."
+    },
+    {
+      "id": "operator-shell",
+      "repo": "propio-agent",
+      "depends_on": [
+        "session-inspection"
+      ],
+      "criteria": [
+        "a8",
+        "a9"
+      ],
+      "status": "planned",
+      "branch": null,
+      "pr": null,
+      "evidence": {},
+      "note": "Scope, acceptance and risk-specific validation in design.md."
+    }
+  ]
+}
