@@ -285,3 +285,10 @@ precedence order rather than each growing its own.
 - Release automation in both repositories.
 
 These are the stable ground the roadmap builds on.
+
+## Scope clarification, 2026-11-15
+
+The observations above describe the audited baseline. Missing pricing resolution
+and cost UI are no longer product gaps to implement: the owner removed pricing
+from the roadmap. Model/token/cache measurements and their completeness remain
+in scope; downstream dashboards may independently calculate monetary values.

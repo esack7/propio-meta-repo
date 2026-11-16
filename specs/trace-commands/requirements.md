@@ -3,7 +3,7 @@
 ## Summary
 
 Phase 4 of [maturity-audit-roadmap](../maturity-audit-roadmap/design.md): make
-existing trace journals useful from the terminal and make session usage/cost
+existing trace journals useful from the terminal and make session token and cache usage
 visible. Phases 1–3 are merged; this phase completes the daily-driver milestone.
 The selected repository is `propio-agent`, as proposed in the roadmap and accepted
 when the owner asked to continue with this phase. `repos.txt` is authoritative.
@@ -15,8 +15,8 @@ when the owner asked to continue with this phase. `repos.txt` is authoritative.
 - In-session `/trace` and `/usage`, including background summaries and retries.
 - A capture flag and persistent setting; retain the environment variable as a
   compatibility fallback and preserve standard capture as the default.
-- Versioned, dated default pricing data; unsupported models and unsupported
-  billing contexts remain unknown, never implicitly free.
+- Provider/model identity and measured input/output, reasoning and cache token
+  counts, with explicit availability and completeness for downstream consumers.
 - Run identifiers and diagnostic commands when a turn fails.
 - Trace user-entered `!` shell commands, including rejection and cancellation.
 - Retire the misleading `--show-trace` name through a documented compatibility
@@ -26,9 +26,9 @@ when the owner asked to continue with this phase. `repos.txt` is authoritative.
 
 No provider adapter changes, provider calls or paid tests, publication, durable
 session replay/resume, new transport, workspace rewind, trace GUI, or journal
-format redesign. Trace capture stays observational. Pricing estimates are not
-invoices or estimates of subscription entitlements. No automatic network pricing
-lookup at runtime. Export does not imply uploading or sharing the bundle.
+format redesign. Trace capture stays observational. Provider price tables, pricing
+resolvers, monetary estimates, billing dashboards and price maintenance are outside
+this product scope; they are not deferred deliverables of this roadmap. Export does not imply uploading or sharing the bundle.
 
 ## Acceptance criteria
 
@@ -42,14 +42,15 @@ lookup at runtime. Export does not imply uploading or sharing the bundle.
 - [ ] **a3** CLI export and verify use existing APIs. Standard export is the
   default; full material requires explicit selection. Tampered bundles fail with
   nonzero status, and output does not overwrite existing destinations silently.
-- [ ] **a4** A packaged pricing resolver has source URLs, version and effective
-  date. Known supported cases calculate correctly; unknown models/endpoints and
-  unsupported usage components remain unpriced. Provider-reported and estimated
-  costs remain distinguishable without double counting.
 - [ ] **a5** `/trace` describes the latest foreground turn; `/usage` covers the
   current session's journals, including background summaries and retries. Totals
-  match offline inspection with the same pricing resolver and preserve partial
-  coverage, unknown usage and currency boundaries.
+  match offline inspection for provider/model, purpose, requests/attempts and
+  input/output, reasoning, cache-read and cache-write token metrics. Preserve
+  per-metric completeness and unknown values; do not sum overlapping token
+  categories or double-count cumulative reports. JSON/export retain timestamps
+  and identities so a separate dashboard can apply its own historical prices.
+  CLI usage presentation contains no monetary totals or estimates; migration
+  documentation covers existing pricing APIs while old bundles remain readable.
 - [ ] **a6** Capture resolves CLI flag > environment > runtime setting > standard.
   Both standard/full are validated and their origin is inspectable. Existing
   environment usage and settings fields continue to work; full capture remains
@@ -62,12 +63,18 @@ lookup at runtime. Export does not imply uploading or sharing the bundle.
   and output content; full capture follows existing redaction/material rules.
   Recording failure does not change command execution or error handling.
 - [ ] **a9** Help and README document the complete diagnose/list/show/export/verify
-  workflow, `/trace`, `/usage`, capture/privacy and pricing limitations. The old
+  workflow, `/trace`, `/usage`, capture/privacy and measurement limitations. The old
   `--show-trace` flag preserves its behavior as a deprecated visibility alias and
   cannot be confused with capture. Credential-free process tests exercise the CLI.
 
 ## Working decisions
 
 Design details and planned checks are in [design.md](design.md). Delivery state and
-exact-commit evidence belong to [delivery.json](delivery.json). No implementation
-worktree is needed until the owner starts implementation of this plan.
+exact-commit evidence belong to [delivery.json](delivery.json).
+
+Owner decision, 2026-11-15: remove pricing from product scope. Criterion a4 is
+retired, not completed or reassigned. A separate dashboard may consume exported
+measurements and own time-varying price data. No dashboard is planned here.
+The session-inspection slice also removes monetary CLI presentation and documents
+a compatibility path for existing pricing interfaces/export fields; historical
+trace data must remain readable.

@@ -10,7 +10,7 @@ before source changes.
 
 - `src/trace/index.ts` exports journal reading, inspection, export, verification,
   and measurement aggregation. Reuse these contracts instead of implementing
-  another parser, verifier, or cost accumulator.
+  another parser, verifier, or usage accumulator.
 - `src/trace/inspection.ts` returns capture completeness, warnings, operation
   outcomes and provider measurements. Timeline detail also needs the journal's
   event envelopes; current operation summaries alone are not a timeline.
@@ -79,28 +79,31 @@ supplementing CLI tests where
 argument routing introduces a boundary. No network or tool execution in any of
 these commands.
 
-## Pricing
+## Usage primitives and product boundary
 
-Ship a small, explicit supported table as package data. Each entry identifies the
-provider, exact model/aliases, supported endpoint/billing class, currency, rate
-units, source URL and verification/effective date; the table has a version.
-Verify initial rates against primary provider pricing documentation during the
-pricing slice. No numerical rates are asserted by this plan. Initial coverage
-should include documented OpenAI API and Anthropic API models that the resolver
-can identify unambiguously; other providers stay unknown until explicit entries
-are verified. Do not infer dated variants, routed upstream prices, free local
-models, or subscription prices from a friendly model name.
+Owner decision (2026-11-15): pricing does not belong in this product. No bundled
+price data, resolver implementation, monetary estimates, price refresh workflow,
+or dashboard is a deliverable of this spec or roadmap.
 
-The default resolver remains application-owned and implements the existing
-ProviderPricingResolver. Preserve explicit overrides for other consumers. Apply
-cache and reasoning categories only when their inclusion in the provider's token
-counts is known; do not bill reasoning twice or count cached input as both full
-price and cache price. An unsupported pricing rule or missing usage stays partial
-or unknown. Never add reported and estimated costs for the same attempt into a
-single misleading bill; use the inspection model's separate totals/labels.
-Cross-currency costs are not converted or summed. Snapshot/fixed arithmetic tests
-use deterministic data, not network calls or live bills. Package tests verify the
-data ships in the built/packed artifact.
+Expose the existing provider/model and request/attempt identities, observation
+timestamps, request purpose, token metrics and per-metric completeness. Keep
+input/output, reasoning, cache-read and cache-write counts distinct. Some
+categories overlap and provider cache accounting differs: preserve the provider's
+reported semantics rather than summing every category into a synthetic total.
+Deduplicate cumulative reports, retain retry measurements, and leave unavailable
+metrics unknown rather than zero. Cache-write duration is not present in current
+normalized usage: do not infer it; downstream pricing may need additional data.
+
+A separate dashboard can join these measurements to its own versioned price data.
+That consumer owns billing assumptions, rates and historical price selection.
+
+Existing trace APIs and bundles already contain cost fields and an optional
+pricing interface. These are historical compatibility facts, not new scope.
+During session-inspection, remove cost/estimate lines from CLI presentation and
+avoid adding them to /usage. Document deprecation/migration for pricing interfaces;
+do not silently break existing exports or drop old recorded fields. Any eventual
+breaking API removal needs explicit migration notes and versioning. Preserve
+reading and verification of historical bundles without introducing price tables.
 
 ## Capture and visibility compatibility
 
@@ -122,7 +125,7 @@ Avoid repeated deprecation output that would corrupt JSON or streamed answers.
 background summary completed later. No run yet is an explicit empty state.
 `/usage` includes all recorded runs for the current session (not every historical
 session in the workspace), including provider summary work and retries. Match
-inspection using the same resolver, preserve completeness, and ensure distinct
+inspection using the same measurement aggregation, preserve completeness, and ensure distinct
 runs are counted once. Foreground and summary IDs must remain distinct; no new
 module-level session state. Read after run closure and label concurrently written
 summary journals as partial. Normal turn output and JSON responses remain stable.
@@ -152,16 +155,16 @@ output behavior remain authoritative; this does not add new permission prompts.
 
 ## Delivery and validation
 
-Five slices, in delivery order (the authoritative dependency graph is delivery.json):
+Four active slices, in delivery order (the authoritative dependency graph is delivery.json):
 
 1. `trace-cli`: discovery, standalone command routing, timeline, export/verify,
    process-level no-provider-startup tests and initial workflow docs (a1–a3, a9).
-2. `pricing`: supported data/resolver and arithmetic/packaging checks (a4).
-3. `capture-settings`: precedence, validation, sandbox forwarding, visibility
+2. `capture-settings`: precedence, validation, sandbox forwarding, visibility
    alias/help migration and capture docs (a6, a9).
-4. `session-inspection`: `/trace`, `/usage`, failure hints and reconciliation of
-   multi-run measurements with offline inspection (a5, a7, a9).
-5. `operator-shell`: shell journal lifecycle, policy/cancellation/failure cases,
+3. `session-inspection`: `/trace`, `/usage`, failure hints and reconciliation of
+   multi-run token/cache measurements with offline inspection, removal of monetary
+   CLI presentation, and compatibility/migration documentation (a5, a7, a9).
+4. `operator-shell`: shell journal lifecycle, policy/cancellation/failure cases,
    complete end-to-end documentation and acceptance pass (a8, a9).
 
 For every source slice: `npm test`, `npm run build`, `npm run format:check`,
@@ -171,16 +174,26 @@ journals/provider fixtures at narrow/wide widths, including an interactive sessi
 for slash commands and a shell command. No credentials or paid calls are needed.
 Keep deterministic timeline snapshots and inject clocks/IDs for fixtures. Include
 partial JSONL, duplicate identities, malformed rows, terminal control characters,
-known/unknown/mixed pricing, cached usage, retries and missing material. Do not
+known/unknown token metrics, overlapping reasoning/cache categories, cumulative
+usage reports, retries, summaries, historical bundle compatibility and missing material. Do not
 call a slice verified until review, merge and evidence reconciliation are done.
 
 ## Risks and boundaries
 
 The main risks are counting retries/summary work twice, silently treating missing
-usage as free, starting provider setup from offline commands, exposing full capture
+usage as zero, starting provider setup from offline commands, exposing full capture
 by default, and changing error identity while adding failure hints. The checks
 above are planned before implementation. Existing imports remain one-way: trace
 holds data/inspection logic; CLI/UI own discovery, formatting and configuration.
 The full-capture journal can contain private data; docs explain this without adding
 an unrelated sharing workflow. Any newly discovered cross-repository change needs
 an explicit repository-selection decision before preparation.
+
+## Retired slice history
+
+The pricing slice was started at 658bf40 on codex/trace-commands-pricing
+(start_order 2), but had no source changes, commits or PR. The owner removed its
+scope on 2026-11-15. The branch is retained; its registration is archived in
+delivery.json scope_changes, outside the active dependency graph. No pricing
+acceptance is claimed. The clean worktree was removed through close-spec
+--worktrees-only before retiring the registration.

@@ -80,6 +80,11 @@ Recorded on 2026-11-11. Detail is in `design.md`.
   `docs/agent-abstractions-plan.md` is kept because earlier specs cite it; this
   spec supersedes its package layout.
 
+- **Usage boundary (2026-11-15).** The owner removed pricing from product scope.
+  Model identity, usage, tokens and caching primitives remain reusable data inputs.
+  A separate dashboard may own historical provider prices and monetary calculations;
+  no such dashboard or pricing implementation is a deliverable of this roadmap.
+
 ## Open questions
 
 None. The `propio-server` clone URL is needed before `chat-server-spike`, not

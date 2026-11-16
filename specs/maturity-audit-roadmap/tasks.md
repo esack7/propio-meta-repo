@@ -16,7 +16,7 @@ specs listed in [design.md](design.md), each with its own delivery record.
 - [x] Create the first follow-on spec (`tool-permissions`) with `create-spec`: [tool-permissions](../tool-permissions/requirements.md).
 - [x] Create the phase 2 spec (`turn-steering`): [turn-steering](../turn-steering/requirements.md). Complete 2026-11-14.
 - [x] Create the phase 3 spec (`tool-call-rendering`): [tool-call-rendering](../tool-call-rendering/requirements.md). Complete and worktree closed 2026-11-15.
-- [x] Create the phase 4 spec (`trace-commands`): [trace-commands](../trace-commands/requirements.md). Five implementation slices planned.
+- [x] Create the phase 4 spec (`trace-commands`): [trace-commands](../trace-commands/requirements.md). Four active implementation slices; pricing removed from scope.
 
 ## Baseline checks (2026-11-11, Node 22.23.3)
 
@@ -46,9 +46,10 @@ and note which behaviors are the most disruptive.
 (#102–#105), `turn-steering` (#106–#109), and `tool-call-rendering` (#110–#114)
 have verified delivery records and closed worktrees. Phase 4,
 [trace-commands](../trace-commands/requirements.md), is now specified and planned
-in five slices for `propio-agent`. The `trace-cli` slice is verified after
-PR [#115](https://github.com/esack7/propio-agent/pull/115) merged; `pricing` is next,
-with four slices remaining. The feature worktree is retained. Follow its
+in four active slices for `propio-agent`. The `trace-cli` slice is verified after
+PR [#115](https://github.com/esack7/propio-agent/pull/115) merged; `capture-settings` is next,
+with three slices remaining. Pricing was removed from product scope on 2026-11-15.
+The clean worktree was removed; branches and evidence are retained. Follow its
 [design](../trace-commands/design.md) and [delivery record](../trace-commands/delivery.json).
 The historical steps below describe how phase 1 was started.
 

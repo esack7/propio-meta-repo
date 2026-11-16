@@ -24,7 +24,7 @@ into application code.
 | `mcp` | Transports, connection lifecycle, discovery, call outcomes | Configuration file locations, tool rendering |
 | `skills` | Parsing, discovery from supplied roots, precedence, invocation metadata | Execution, permission grants |
 | `context` | Turns, prompt planning, summaries, memory, serialization | Skill records, mode state, file search |
-| `trace` | Journal, recorder, inspection, export, measurements, pricing interface | Storage discovery, terminal formatting |
+| `trace` | Journal, recorder, inspection, export, model/token/cache measurements | Storage discovery, terminal formatting |
 | `agent-core` | Model/tool loop, the session protocol (below), scheduling, sub-agent execution | Storage, transports, plan mode, slash commands |
 | `cli` (application) | Configuration loading, file-backed stores, modes, terminal UI, commands, sandbox | Anything a second application would also need |
 | `chat-server` (application, in `propio-server`) | HTTP transport for the session protocol, its own stores, MCP-only tool surface, web chat | Anything the CLI would also need |
@@ -94,7 +94,7 @@ and one consumer other than the CLI.
 
 The owner can run a full working day in the CLI without switching tools because
 of: an action taken without consent, a turn that could not be redirected, a tool
-call that could not be read, or a question about cost or history that needed code
+call that could not be read, or a question about usage or history that needed code
 to answer.
 
 ## Roadmap
@@ -107,7 +107,7 @@ Phases are ordered by what blocks daily use. Each becomes its own spec through
 | 1 | `tool-permissions` | propio-agent | — | Operator consent before side effects |
 | 2 | `turn-steering` | propio-agent | 1 | Redirect a running turn; command half of the protocol |
 | 3 | `tool-call-rendering` | propio-agent | 1 | Readable tool calls; event half of the protocol |
-| 4 | `trace-commands` | propio-agent | — | Read traces and cost from the terminal |
+| 4 | `trace-commands` | propio-agent | — | Read traces and token/cache usage from the terminal |
 | 5 | `chat-server-spike` | propio-agent, propio-server | 1–3 | Find boundary problems while APIs are cheap to change |
 | 6 | `outcome-evals` | propio-agent | 1 | Regression signal |
 | 7 | `mcp-remote` | propio-agent | 1 | HTTP transport and OAuth, which the web chat needs |
@@ -247,11 +247,12 @@ Scope:
   existing inspection API. `show` prints a timeline: requests, attempts, tool
   operations, policy decisions, durations, tokens.
 - In-session `/trace` (current run summary) and `/usage` (session tokens and
-  cost).
+  cache reads/writes and per-metric completeness).
 - A flag and setting for capture level, replacing the environment variable as the
   primary switch.
-- A default pricing resolver shipped as data with a version and date; unknown
-  models stay unknown.
+- Preserve provider/model identities, timestamps and token/cache measurements
+  for external consumers. Price tables, resolvers and monetary estimates are
+  outside product scope.
 - Print the run ID and a `propio trace show` hint when a turn fails.
 - Record user-entered `!` shell commands in the journal.
 - Rename or retire `--show-trace`.
@@ -260,7 +261,8 @@ Scope:
 Acceptance:
 
 - A failed run can be diagnosed from the terminal without writing code.
-- Session cost is visible in-session and matches inspection of the journals.
+- Session token/cache usage is visible in-session and matches journal inspection;
+  unavailable metrics remain unknown and overlapping categories are not summed.
 - Timeline output is stable enough to snapshot-test.
 
 ### `chat-server-spike`
@@ -284,8 +286,8 @@ agent as part of the spike.
 Scope: a small hermetic task suite (fix a failing test, a constrained multi-file
 change, a prompt-injection resistance case, a permission-boundary case), run
 through non-interactive mode against fixture repositories, graded on outcomes,
-with repeated trials and results stored with model, configuration, tokens, and
-cost from the trace.
+with repeated trials and results stored with model, configuration, timestamps,
+tokens and cache measurements from the trace. Pricing is not an eval dependency.
 
 Acceptance: one command produces a pass-rate report; results from two
 configurations can be compared; the permission case fails if phase 1 regresses.
