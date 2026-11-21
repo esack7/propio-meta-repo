@@ -264,11 +264,22 @@ def candidate_step(d, j, wt, branch):
                     or git(wt, "ls-files", "--others", "--exclude-standard")):
                 raise FactoryError("staged candidate changed before commit; inspect the worktree")
             log = directory / "commit.log"
+            print(f"Round {n}: committing the candidate (approve the signer if prompted)", flush=True)
             rc = process(["git", "-c", "core.logAllRefUpdates=true", "commit", "-F", "-"],
                          wt, message + "\n", log, p["timeout_seconds"], env=dict(os.environ, GIT_REFLOG_ACTION=action))
             current = git(wt, "rev-parse", "HEAD")
             if rc and current == head:
                 ensure_head(wt, branch, head)
+                # Git dies with 128 when it cannot create the signed commit
+                # object. Hook rejection is an ordinary nonzero commit result.
+                if rc == 128:
+                    # A pre-commit hook may have formatted and staged files
+                    # before the signer ran. Remember the index Git left us.
+                    j.save("commit", tree=git(wt, "write-tree"))
+                    raise AgentUnavailable(
+                        f"Git could not create the commit. Check the signer or other fatal Git error "
+                        f"below, then run factory resume {d.spec} --slice {p['slice']}. "
+                        f"Round {n} is preserved.\n{tail(log, 1500)}")
                 retry_round(j, f"git commit exited {rc}. Diagnostics from {log}:\n{tail(log, 1500)}\n"
                                f"Rejected message:\n{message}", repair="commit")
                 return

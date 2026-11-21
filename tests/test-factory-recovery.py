@@ -231,7 +231,7 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(self.git(self.wt(), "log", "-1", "--format=%s"), "example: implement first (round 3)")
         self.assertIn("Ticket: EX-123", self.git(self.wt(), "show", "-s", "--format=%B", "HEAD~1"))
 
-    def test_signing_timeout_resumes_with_a_signed_commit(self):
+    def test_signing_timeout_and_refusals_retry_in_the_same_round(self):
         signer = shutil.which("ssh-keygen")
         if not signer or "gpg.ssh.allowedSignersFile" not in self.git(self.wt(), "help", "--config"):
             self.skipTest("Git SSH signing unavailable")
@@ -240,9 +240,12 @@ if os.environ.get("BAD_RESULT"):'''))
         allowed = self.base / "signers"
         allowed.write_text("fixture " + key.with_suffix(".pub").read_text())
         gate = self.base / "wait-for-signer"
-        gate.touch()
+        gate.write_text("timeout")
         self.env.update(TEST_SIGNER=signer, SIGNER_GATE=str(gate))
-        self.shim("test-signer", '#!/bin/sh\nif test -f "$SIGNER_GATE"; then exec sleep 60; fi\nexec "$TEST_SIGNER" "$@"\n')
+        self.shim("test-signer", '#!/bin/sh\nif test -f "$SIGNER_GATE"; then\n'
+                  '  if grep -q timeout "$SIGNER_GATE"; then exec sleep 60; fi\n'
+                  '  echo "1Password: agent returned an error" >&2; exit 1\n'
+                  'fi\nexec "$TEST_SIGNER" "$@"\n')
         for name, value in {"commit.gpgSign": "true", "gpg.format": "ssh", "user.signingKey": str(key),
                             "gpg.ssh.program": "test-signer", "gpg.ssh.allowedSignersFile": str(allowed)}.items():
             self.git(self.wt(), "config", name, value)
@@ -251,9 +254,27 @@ if os.environ.get("BAD_RESULT"):'''))
         self.cfg_path.write_text(json.dumps(cfg))
         self.assertIn("git timed out", self.start_run(ok=False))
         self.assertEqual(self.journal()["phase"], "commit")
+        calls = self.calls.read_bytes()
+        gate.write_text("refused")
+        hook = self.base / "hooks" / "pre-commit"
+        hook.parent.mkdir()
+        hook.write_text('#!/bin/sh\necho formatted > formatted.txt\ngit add formatted.txt\n')
+        hook.chmod(0o755)
+        self.git(self.wt(), "config", "core.hooksPath", str(hook.parent))
+        for _ in range(2):
+            output = self.factory("resume", ok=False)
+            self.assertIn("1Password: agent returned an error", output)
+            self.assertIn("Round 1 is preserved", output)
+            self.reload()
+            self.assertEqual(self.data["slices"][0]["status"], "implementing")
+            checkpoint = self.journal()
+            self.assertEqual((checkpoint["phase"], checkpoint["round"]), ("commit", 1))
+            self.assertEqual(checkpoint["tree"], self.git(self.wt(), "write-tree"))
+            self.assertEqual(self.calls.read_bytes(), calls)
         gate.unlink()
         self.factory("resume")
         self.git(self.wt(), "verify-commit", "HEAD")
+        self.assertEqual(self.git(self.wt(), "show", "HEAD:formatted.txt"), "formatted")
 
     def test_draft_survives_lost_create_response(self):
         self.pr.write_text(json.dumps(dict(state="CLOSED", headRefName="codex/example-first", isCrossRepository=False)))

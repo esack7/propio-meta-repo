@@ -35,7 +35,9 @@ The CLI supplies its default model when the role omits one. Set `max_build_round
 
 The runner commits each round's edits to the registered slice branch. It checks the candidate commit, sends the full slice diff and check outcomes to a fresh reviewer, and reruns checks and review after fixes. On approval, `delivery.json` records `review`, the reviewed commit, and the checks that passed for each criterion. Review the local branch and delivery change before proceeding with the normal PR workflow.
 
-Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If Git rejects the candidate before creating a commit, the builder receives the diagnostics and the rejected message. It can repair the staged change or supply a corrected commit message with the required trailers. That message applies to the commit being repaired. Later rounds create their own messages. Repeated rejection exhausts the same build-round budget and leaves a blocked handoff with the staged work intact. A signer or hook timeout remains resumable at the commit stage.
+Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. A signing failure or other fatal Git error (exit 128) pauses the run at the commit step. Once the signer is ready or the error is resolved, use `bin/factory resume <spec> --slice <slice>` to retry the staged candidate in the same build round. A signer or hook timeout also remains resumable at the commit stage.
+
+When a hook rejects the candidate, the builder receives the diagnostics and the rejected message. It can repair the staged change or supply a corrected commit message with the required trailers. That message applies to the commit being repaired. Later rounds create their own messages. Repeated hook rejection exhausts the build-round budget and leaves a blocked handoff with the staged work intact.
 
 ## Resume a run
 
