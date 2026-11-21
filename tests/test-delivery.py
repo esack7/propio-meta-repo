@@ -18,13 +18,14 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / ".claude/skills"
 ENGINE = SKILLS / "_shared/delivery.py"
+sys.path.insert(0, str(ENGINE.parent))
 PACKAGE = SKILLS / "verify-packages/scripts/verify-packages.py"
 spec = importlib.util.spec_from_file_location("delivery", ENGINE)
 delivery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(delivery)
 
 
-class WorkflowTests(unittest.TestCase):
+class WorkflowFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="delivery tests ")
         self.addCleanup(self.tmp.cleanup)
@@ -150,6 +151,7 @@ class WorkflowTests(unittest.TestCase):
         s = self.data["slices"][0]
         response = dict(
             state="MERGED",
+            isCrossRepository=False,
             headRefName=s["branch"],
             headRefOid=self.git(self.wt(), "rev-parse", "HEAD"),
             baseRefName="main",
@@ -169,6 +171,8 @@ class WorkflowTests(unittest.TestCase):
         self.data["slices"][0]["pr"] = 1
         self.save()
 
+
+class WorkflowTests(WorkflowFixture):
     def test_status_read_only_and_incomplete_close(self):
         before = self.state_path.read_bytes()
         result = json.loads(self.engine("status", "--json"))

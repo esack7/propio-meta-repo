@@ -106,9 +106,10 @@ have actually merged, creates `codex/<spec>-<slice>` from the configured remote
 default branch, and atomically records the branch and status. Failed state writes
 restore the prior checkout and remove only the newly created branch. Collisions,
 unregistered branches, unfinished dependencies, or dirty worktrees are refused.
-Delivery initialization and slice starts use a per-spec lock; do not run lifecycle helpers concurrently; after a crash, inspect it and remove a stale
-lock only after confirming no helper is running. Do not edit state concurrently
-with a helper.
+Delivery mutations use a per-spec operating-system lock that releases when the operation exits.
+A legacy `.delivery.lock` directory still blocks mutations until the old helper has exited and
+the stale directory is removed. Make manual edits while helpers are idle. Factory runs also
+hold a separate worker lock and record recoverable stages. [Factory recovery and draft PRs](software-factory.md)
 
 For an existing PR branch, explicitly record its repository, branch, PR, criteria,
 and evidence in a slice, then inspect `status --remote`. This registers the branch
@@ -120,6 +121,13 @@ record with multiple started branches and no known order must be corrected befor
 reopening; the helper does not guess from array position.
 
 ## Completion and cleanup
+
+Run `bin/factory verify <spec>` to reconcile integrated slices and record their
+`merge_evidence`. The receipt includes the reviewed branch head, configured base,
+integrated commit and proof method. A consumer slice can declare `package_checks`
+for a producer in its dependencies. Its `package_evidence` records passing reports
+for the exact producer and consumer commits. Use `bin/factory run <spec>` to
+advance slices whose dependencies have verified. [Multi-repo factory usage](software-factory.md#advance-and-verify-a-whole-spec)
 
 Completion requires every planned slice verified and every criterion covered.
 Normal close additionally verifies the retained branch head is in the fetched
