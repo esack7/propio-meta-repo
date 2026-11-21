@@ -23,7 +23,7 @@ The preview also accepts `--json`. Omit `--slice` on a preview to inspect the fi
 3. Configure the repository's standard checks under `repo_checks` in [factory/config.json](../factory/config.json). An explicitly empty array is valid for a repository with only criterion-specific checks. Install the worktree's development dependencies as required. The runner executes the configured commands directly in the worktree, in order, and stops at the first failure. Use trusted checks and run with the credentials appropriate to those commands.
 4. The runner uses Python 3.9+, Git, and Ruby with its standard YAML library for the project map's ordered context paths. Sign in to the CLIs required for the selected profile and configure a Git author for local commits. Claude Code needs `--restricted` and `--json-schema`. Codex needs `exec --ephemeral`, `--ignore-user-config`, and `--output-schema`. The review session always starts fresh.
 
-Checks must leave the candidate clean. Direct generated output to an ignored or temporary directory. If a check edits a tracked file or leaves an untracked file, the builder receives the affected paths and any check failure. It can inspect the files in place, repair the cause, and rerun the checks within the slice's round limit.
+Repository, criterion, and package checks must leave the candidate clean. Direct generated output to an ignored or temporary directory. If a check edits a tracked file or leaves an untracked file, the builder receives the affected paths and any check failure. It can inspect the files in place, repair the cause, and rerun the checks within the slice's round limit. The runner records untracked check output in its journal and requires it to be removed or ignored before staging a repair.
 
 ## Choose agents and limits
 
@@ -35,7 +35,7 @@ The CLI supplies its default model when the role omits one. Set `max_build_round
 
 The runner commits each round's edits to the registered slice branch. It checks the candidate commit, sends the full slice diff and check outcomes to a fresh reviewer, and reruns checks and review after fixes. On approval, `delivery.json` records `review`, the reviewed commit, and the checks that passed for each criterion. Review the local branch and delivery change before proceeding with the normal PR workflow.
 
-Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If Git rejects the candidate before creating a commit, the builder receives the diagnostics and the rejected message. It can repair the staged change or supply a corrected commit message with the required trailers. Repeated rejection exhausts the same build-round budget and leaves a blocked handoff with the staged work intact. A signer or hook timeout remains resumable at the commit stage.
+Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If Git rejects the candidate before creating a commit, the builder receives the diagnostics and the rejected message. It can repair the staged change or supply a corrected commit message with the required trailers. That message applies to the commit being repaired. Later rounds create their own messages. Repeated rejection exhausts the same build-round budget and leaves a blocked handoff with the staged work intact. A signer or hook timeout remains resumable at the commit stage.
 
 ## Resume a run
 

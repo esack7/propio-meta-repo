@@ -217,6 +217,22 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(self.data["slices"][0]["status"], "blocked")
         self.assertIn("Cannot launch missing-factory-test-executable", self.data["slices"][0]["note"])
 
+    def test_leftover_check_artifact_cannot_be_staged(self):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["repo_checks"]["a"] = [[sys.executable, "-c",
+            "from pathlib import Path; Path('coverage.tmp').write_text('generated')"]]
+        self.cfg_path.write_text(json.dumps(cfg))
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")'))
+        self.factory("run", "--slice", "first", ok=False)
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "blocked")
+        self.assertIn("Generated check files still eligible", self.data["slices"][0]["note"])
+        self.assertEqual(self.git(self.wt(), "ls-files", "coverage.tmp"), "")
+        self.assertEqual((self.wt() / "coverage.tmp").read_text(), "generated")
+        self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "1")
+
     @unittest.skipUnless(os.environ.get("FACTORY_LIVE_PROFILE"), "opt-in authenticated CLI smoke")
     def test_live(self):
         # Fully synthetic prompt and local remotes. Enforce the exact expected final content.

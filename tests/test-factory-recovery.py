@@ -214,6 +214,23 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "3")
         self.assertEqual(self.journal()["head"], self.git(self.wt(), "rev-parse", "HEAD"))
 
+    def test_repaired_message_does_not_carry_into_review_repair(self):
+        hook = self.base / "hooks" / "commit-msg"
+        hook.parent.mkdir()
+        hook.write_text('#!/bin/sh\nif git rev-parse HEAD:greeting.txt >/dev/null 2>&1; then exit 0; fi\n'
+                        'grep -q "Ticket: EX-123" "$1" || { echo "ticket trailer required" >&2; exit 1; }\n')
+        hook.chmod(0o755)
+        self.git(self.wt(), "config", "core.hooksPath", str(hook.parent))
+        builder = (self.bin / "codex").read_text()
+        self.shim("codex", builder.replace('file.write_text("typo")', 'file.write_text("hello")')
+                  .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "ticket trailer required" in prompt:
+    result["summary"] = "Repair the first commit\\n\\nTicket: EX-123"
+if os.environ.get("BAD_RESULT"):'''))
+        self.start_run()
+        self.assertEqual(self.journal()["round"], 3)
+        self.assertEqual(self.git(self.wt(), "log", "-1", "--format=%s"), "example: implement first (round 3)")
+        self.assertIn("Ticket: EX-123", self.git(self.wt(), "show", "-s", "--format=%B", "HEAD~1"))
+
     def test_signing_timeout_resumes_with_a_signed_commit(self):
         signer = shutil.which("ssh-keygen")
         if not signer or "gpg.ssh.allowedSignersFile" not in self.git(self.wt(), "help", "--config"):

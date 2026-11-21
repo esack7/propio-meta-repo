@@ -239,6 +239,38 @@ class SpecTests(FactoryFixture):
         self.assertEqual(report["verified_slices"], [])
         self.assertIn("could not fetch", report["issues"]["first"])
 
+    @unittest.skipUnless(shutil.which("npm"), "npm unavailable")
+    def test_package_check_worktree_changes_get_repaired(self):
+        self.packages()
+        seed = self.seeds["b"]
+        target = self.wt("b") / "package-output.tmp"
+        once = self.base / "package-wrote-output"
+        script = seed / "test.js"
+        script.write_text(script.read_text() + "\nconst fs = require('fs');\n" +
+                          f"if (!fs.existsSync({json.dumps(str(once))})) {{\n" +
+                          f"fs.writeFileSync({json.dumps(str(target))}, 'generated');\n" +
+                          f"fs.writeFileSync({json.dumps(str(once))}, 'done');\n}}\n")
+        self.git(seed, "add", "test.js")
+        self.git(seed, "commit", "-m", "package check output fixture")
+        self.git(seed, "push", "origin", "main")
+        self.start()
+        (self.wt() / "greeting.txt").write_text("hello!")
+        self.git(self.wt(), "add", "greeting.txt")
+        self.git(self.wt(), "commit", "-m", "producer")
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.verified()
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "checks left changes" in prompt:
+    assert "package-output.tmp" in prompt
+    Path(".gitignore").write_text("package-output.tmp\\n")
+if os.environ.get("BAD_RESULT"):'''))
+        self.factory("run", "--slice", "second")
+        self.reload()
+        self.assertEqual(self.data["slices"][1]["status"], "review")
+        self.assertEqual(self.git(self.wt("b"), "ls-files", "package-output.tmp"), "")
+        self.assertEqual(target.read_text(), "generated")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -159,7 +159,23 @@ def retry_round(j, feedback, *, repair=None):
     n = j.state["round"]
     if n >= j.state["plan"]["max_build_rounds"]:
         raise FactoryError(f"build round limit reached. Outstanding feedback: {feedback}")
-    j.save("editing" if repair else "build", round=n + 1, feedback=feedback, repair=repair)
+    j.save("editing" if repair else "build", round=n + 1, feedback=feedback, repair=repair,
+           commit_message=j.state.get("commit_message") if repair == "commit" else None)
+
+
+def repair_check_changes(j, wt, branch, head, feedback):
+    ensure_head(wt, branch, head)
+    changes = git(wt, "status", "--porcelain", "--untracked-files=all")
+    if not changes:
+        return False
+    artifacts = set(j.state.get("check_artifacts", []))
+    artifacts.update(filter(None, git(wt, "ls-files", "--others", "--exclude-standard", "-z").split("\0")))
+    j.save(j.state["phase"], check_artifacts=sorted(artifacts))
+    dirty = (f"checks left changes in the worktree:\n{changes}\n"
+             "Inspect these files and fix the cause so checks leave the candidate clean. "
+             "Remove generated files or ignore them before committing the repair.")
+    retry_round(j, "\n".join(filter(None, (feedback, dirty))), repair="checks")
+    return True
 
 
 def agent_directory(directory, role):
@@ -193,6 +209,14 @@ def candidate_step(d, j, wt, branch):
         ensure_head(wt, branch, head)
         if result["outcome"] == "blocked":
             raise FactoryError(result["summary"])
+        if st.get("check_artifacts"):
+            candidates = set(git(wt, "ls-files", "--cached", "--others", "--exclude-standard", "-z").split("\0"))
+            remaining = candidates.intersection(st["check_artifacts"])
+            if remaining:
+                retry_round(j, "Generated check files still eligible for staging. Remove or ignore them:\n" +
+                            "\n".join(sorted(remaining)), repair="checks")
+                return
+            j.save(j.state["phase"], check_artifacts=[])
         if git(wt, "status", "--porcelain", "--untracked-files=all"):
             git(wt, "add", "-A")
             commit_message = st.get("commit_message")
@@ -249,13 +273,7 @@ def candidate_step(d, j, wt, branch):
             retry_round(j, "The slice has no changes relative to its starting commit. Implement the requested behavior.")
             return
         results, feedback = check_candidate(wt, head, p["checks"], directory, p["timeout_seconds"])
-        ensure_head(wt, branch, head)
-        changes = git(wt, "status", "--porcelain", "--untracked-files=all")
-        if changes:
-            dirty = (f"checks left changes in the worktree:\n{changes}\n"
-                     "Inspect these files and fix the cause so checks leave the candidate clean. "
-                     "Keep generated artifacts out of the commit.")
-            retry_round(j, "\n".join(filter(None, (feedback, dirty))), repair="checks")
+        if repair_check_changes(j, wt, branch, head, feedback):
             return
         reports = []
         consumer = slice_in(st["expected"], p["slice"])
@@ -267,7 +285,8 @@ def candidate_step(d, j, wt, branch):
                 raise
             except FactoryError as exc:
                 feedback = str(exc)
-            ensure_head(wt, branch, head, clean=True)
+            if repair_check_changes(j, wt, branch, head, feedback):
+                return
         if feedback:
             retry_round(j, feedback)
         else:
