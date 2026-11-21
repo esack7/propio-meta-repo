@@ -10,7 +10,7 @@ import shutil
 import sys
 import tempfile
 
-from agents import AgentUnavailable, FactoryError, invoke, process, tail
+from agents import AgentUnavailable, BuilderFeedback, FactoryError, invoke, process, tail
 from delivery import Delivery, eligible_predecessor, exclusive, git, run
 from drafts import lookup, publish, verify_draft
 from journal import Journal, run_root
@@ -208,9 +208,14 @@ def candidate_step(d, j, wt, branch):
                          "Leave Git operations to the runner and keep the repository hooks enabled.")
         j.save("editing")
         print(f"Round {n}: {p['roles']['builder']['agent']} building", flush=True)
-        result = invoke("builder", p["roles"]["builder"], wt,
-                        f"{BUILD}\n\n{context}\n\nPrevious feedback:\n{feedback}",
-                        agent_directory(directory, "builder"), p["timeout_seconds"])
+        try:
+            result = invoke("builder", p["roles"]["builder"], wt,
+                            f"{BUILD}\n\n{context}\n\nPrevious feedback:\n{feedback}",
+                            agent_directory(directory, "builder"), p["timeout_seconds"])
+        except BuilderFeedback as exc:
+            ensure_head(wt, branch, head)
+            retry_round(j, str(exc), repair=st.get("repair") or "checks")
+            return
         ensure_head(wt, branch, head)
         if result["outcome"] == "blocked":
             raise FactoryError(result["summary"])
@@ -302,8 +307,12 @@ def candidate_step(d, j, wt, branch):
     elif phase == "review":
         ensure_head(wt, branch, head, clean=True)
         diff = git(wt, "diff", "--no-ext-diff", "--no-textconv", st["base"], head, "--")
+        changed = set(git(wt, "diff", "--name-only", "--no-renames", "--diff-filter=d", "-z",
+                          st["base"], head, "--").split("\0"))
+        intended = sorted(changed.intersection(st.get("intended_files", [])))
+        j.save("review", intended_files=intended)
         review_input = dict(base=st["base"], candidate=head, diff=diff, check_results=st["results"],
-                            intended_files=st.get("intended_files", []))
+                            intended_files=intended)
         if st.get("package_reports"):
             review_input["package_reports"] = st["package_reports"]
         print(f"Round {n}: {p['roles']['reviewer']['agent']} reviewing {head}", flush=True)

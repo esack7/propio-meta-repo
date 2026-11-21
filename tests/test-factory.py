@@ -245,7 +245,7 @@ if os.environ.get("BAD_RESULT"):'''))
         builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
                            .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "checks left changes" in prompt:
     assert Path("__snapshots__/greeting.snap").read_text() == "hello!"
-    result["intended_files"] = ["__snapshots__/greeting.snap"]
+    result["intended_files"] = ["./__snapshots__/"] if claude else [".\\\\__snapshots__\\\\greeting.snap"]
 if os.environ.get("BAD_RESULT"):'''))
         reviewer = shim / reviewer_name
         reviewer.write_text(reviewer.read_text().replace('assert "check_results" in prompt',
@@ -270,6 +270,50 @@ if os.environ.get("BAD_RESULT"):'''))
         self.reload()
         self.assertEqual(self.data["slices"][0]["status"], "blocked")
         self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "0")
+
+    def test_malformed_claim_is_repaired(self):
+        self.scripted()
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder:
+    result["intended_files"] = [] if "Correct these intended_files" in prompt else [""]
+if os.environ.get("BAD_RESULT"):'''))
+        self.assert_success("mixed")
+        self.assertEqual(len(self.calls.read_text().splitlines()), 3)
+
+    def test_unsafe_normalized_claims_still_fail(self):
+        sys.path.insert(0, str(ROOT / "factory"))
+        from agents import FactoryError, normalize_claims
+        link = self.wt() / "outside"
+        link.symlink_to(self.base, target_is_directory=True)
+        for path in ("../outside.snap", "./../outside.snap", "..\\outside.snap",
+                     "/tmp/outside.snap", "C:\\outside.snap", ".git/config", "./.git/", "outside/secret"):
+            with self.subTest(path=path), self.assertRaises(FactoryError):
+                normalize_claims([path], self.wt())
+
+    def test_reviewer_claims_drop_deleted_and_reverted_files(self):
+        self.scripted()
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder:
+    if "remove obsolete generated files" in prompt:
+        Path("obsolete.snap").unlink()
+        Path("README.md").write_text("a")
+    else:
+        Path("obsolete.snap").write_text("snapshot")
+        Path("README.md").write_text("generated notes")
+        result["intended_files"] = ["obsolete.snap", "README.md"]
+if os.environ.get("BAD_RESULT"):'''))
+        reviewer = self.base / "bin/claude"
+        reviewer.write_text(reviewer.read_text().replace('if os.environ.get("BAD_RESULT"):', '''if not builder:
+    if Path("obsolete.snap").exists():
+        result = dict(outcome="changes", summary="remove obsolete generated files")
+    else:
+        assert '"intended_files": []' in prompt
+        assert "diff --git a/obsolete.snap" not in prompt and "diff --git a/README.md" not in prompt
+if os.environ.get("BAD_RESULT"):'''))
+        self.assert_success("mixed")
+        self.assertEqual(len(self.calls.read_text().splitlines()), 4)
 
     @unittest.skipUnless(os.environ.get("FACTORY_LIVE_PROFILE"), "opt-in authenticated CLI smoke")
     def test_live(self):

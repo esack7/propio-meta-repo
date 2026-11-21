@@ -2,12 +2,12 @@
 
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import signal
 import subprocess
 import sys
 
-from delivery import HELD_LOCKS
+from delivery import HELD_LOCKS, git
 
 
 class FactoryError(ValueError):
@@ -16,6 +16,40 @@ class FactoryError(ValueError):
 
 class AgentUnavailable(FactoryError):
     """A transient process failure; the saved stage can be retried."""
+
+
+class BuilderFeedback(FactoryError):
+    """A recoverable mistake in a builder's file claims."""
+
+
+def normalize_claims(paths, cwd):
+    if not isinstance(paths, list):
+        raise BuilderFeedback(f"intended_files must be a list of paths, received {paths!r}")
+    root = Path(cwd).resolve()
+    claims, invalid = set(), []
+    for raw in paths:
+        if not isinstance(raw, str) or not raw:
+            invalid.append(repr(raw))
+            continue
+        path = PurePosixPath(raw.replace("\\", "/"))
+        if ("\0" in raw or path.is_absolute() or PureWindowsPath(raw).drive
+                or ".." in path.parts or ".git" in path.parts):
+            raise FactoryError(f"Unsafe intended_files path {raw!r}; use repository-relative paths")
+        if str(path) == ".":
+            invalid.append(repr(raw))
+            continue
+        target = root / path
+        if not target.resolve().is_relative_to(root):
+            raise FactoryError(f"Unsafe intended_files path {raw!r}; resolves outside the repository")
+        if target.is_dir():
+            files = git(root, "--literal-pathspecs", "ls-files", "--cached", "--others",
+                        "--exclude-standard", "-z", "--", str(path))
+            claims.update(filter(None, files.split("\0")))
+        else:
+            claims.add(str(path))
+    if invalid:
+        raise BuilderFeedback("Correct these intended_files entries to file or subdirectory paths: " + ", ".join(invalid))
+    return sorted(claims)
 
 
 def process(argv, cwd, prompt, log, timeout, stdout=None, env=None):
@@ -67,7 +101,7 @@ def invoke(role, config, cwd, prompt, directory, timeout):
     if role == "builder":
         schema["properties"]["intended_files"] = {
             "type": "array", "items": {"type": "string"},
-            "description": "Exact repository-relative files intentionally kept as source changes, including generated snapshots."}
+            "description": "Repository-relative files or directories intentionally kept as source changes, including generated snapshots."}
         schema["required"].append("intended_files")
     agent = config["agent"]
     log = directory / (role + ".log")
@@ -110,14 +144,7 @@ def invoke(role, config, cwd, prompt, directory, timeout):
                 or not isinstance(result["summary"], str) or not result["summary"].strip()):
             raise ValueError("invalid outcome or summary")
         if role == "builder":
-            paths = result["intended_files"]
-            if not isinstance(paths, list) or not all(
-                isinstance(p, str) and p and "\0" not in p and "\\" not in p
-                and not PurePosixPath(p).is_absolute() and PurePosixPath(p).as_posix() == p
-                and p != "." and ".." not in PurePosixPath(p).parts
-                and PurePosixPath(p).parts[0] != ".git" for p in paths
-            ):
-                raise ValueError("intended_files must contain exact repository-relative file paths")
+            result["intended_files"] = normalize_claims(result["intended_files"], cwd)
     except FactoryError:
         raise
     except (OSError, AttributeError, TypeError, KeyError, ValueError) as exc:
