@@ -41,11 +41,11 @@ The following items from `docs/PLAN.md` are **not** covered by static tests in t
 
 When validating in a fresh environment:
 
-1. Open the meta-repo root in Claude Code and confirm all nine skills appear in the skill selector.
+1. Open the meta-repo root in Claude Code and confirm all project skills appear in the skill selector.
 2. Run a non-destructive invocation such as `/setup-repositories` with `repositories: []`.
-3. Open the meta-repo in Codex and confirm the same nine skills appear via `.agents/skills` compatibility wrappers.
+3. Open the meta-repo in Codex and confirm the same skills appear via `.agents/skills` compatibility wrappers.
 4. Run `$setup-repositories` with the empty project map.
-5. Open the meta-repo in Propio, run `/skills`, and confirm the same nine skills appear via `.propio/skills` symlinks.
+5. Open the meta-repo in Propio, run `/skills`, and confirm the same skills appear via `.propio/skills` symlinks.
 6. Run `/skill setup-repositories` with the empty project map.
 7. Confirm Codex reads the canonical workflow linked by each wrapper and does not attempt to run a helper beneath `.agents/skills/`.
 8. Open the meta-repo in Cursor and confirm `/link-local-packages` is offered as a command, and that the matching rule is available for agent-requested selection.
@@ -61,3 +61,8 @@ are simulated; live PR authentication and provider release workflows are not tes
 `tests/run-tests.sh` includes this suite. CI runs the suite on Linux and macOS.
 Manual package integration CI uses exact commits and separate candidate/published
 reports; it does not publish a package or change consumer source files.
+
+Factory recovery tests interrupt real local processes during branch registration, implementation,
+commit, and draft PR creation. They check worktree preservation, worker exclusion, and PR reuse
+using local Git remotes and a simulated GitHub CLI. Run them with
+`python3 tests/test-factory-recovery.py`.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Software Factory"
+  short_description: "Preview or implement one local spec slice"
+  default_prompt: "Use $factory to preview a software factory run for a prepared spec."

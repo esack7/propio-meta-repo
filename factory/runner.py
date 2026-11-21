@@ -1,0 +1,437 @@
+"""Preview, implement, and resume a delivery slice."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+from copy import deepcopy
+import shlex
+import shutil
+import sys
+import tempfile
+
+from agents import AgentUnavailable, FactoryError, invoke, process, tail
+from delivery import Delivery, exclusive, git, run
+from drafts import lookup, publish, verify_draft
+from journal import Journal, run_root
+from planning import context_files, helper, plan, print_plan
+
+BUILD = """Implement only this slice in the current worktree. You own source edits.
+The runner commits, runs the listed checks, and invokes the reviewer. Leave git,
+delivery state, and external services to the runner. Address any previous feedback.
+Report built with a summary, or blocked with the outstanding question."""
+REVIEW = """Independently review the complete candidate diff against the supplied criteria,
+design, and repository instructions. Inspect the worktree read-only as needed.
+Assess whether the checks actually exercise each criterion and whether tests were weakened.
+Report approve with a rationale, changes with specific actionable findings tied to
+criteria or concrete defects, or blocked with the question that requires a decision."""
+
+
+def ensure_head(wt, branch, expected, clean=False):
+    if git(wt, "symbolic-ref", "--short", "HEAD") != branch or git(wt, "rev-parse", "HEAD") != expected:
+        raise FactoryError("the checked-out branch or commit changed unexpectedly; inspect the worktree")
+    if clean and git(wt, "status", "--porcelain", "--untracked-files=all"):
+        raise FactoryError("the candidate worktree changed during verification; inspect the edits")
+
+
+def check_candidate(wt, head, checks, directory, timeout):
+    results = {}
+    for group in checks.values():
+        for argv in group:
+            name = shlex.join(argv)
+            if name in results:
+                continue
+            log = directory / f"check-{len(results) + 1}.log"
+            print("Check:", name, flush=True)
+            rc = process(argv, wt, "", log, timeout)
+            results[name] = {"exit": rc, "log": log.name}
+            record = {"commit": head, "results": results}
+            (directory / "checks.json").write_text(json.dumps(record, indent=2))
+            if rc:
+                return results, f"{name} failed (exit {rc}).\n{tail(log)}"
+    return results, ""
+
+
+def slice_in(data, sid):
+    s = next((s for s in data["slices"] if s["id"] == sid), None)
+    if s is None:
+        raise FactoryError(f"{sid}: missing slice in delivery record")
+    return s
+
+
+def adopt_legacy(d, sid, adopt_edits, profile):
+    data = d.load()
+    eligible = [s for s in data["slices"] if s.get("branch") and (sid is None or sid == s["id"])
+                and (s["status"] in {"implementing", "review"} or
+                     (s["status"] == "blocked" and s["note"].startswith("interrupted\n")))]
+    if len(eligible) != 1:
+        raise FactoryError("no unique recoverable slice; inspect factory status and select --slice")
+    s = eligible[0]
+    sid, repo = s["id"], s["repo"]
+    _, wt = d.registered_worktree(repo)
+    head = git(wt, "rev-parse", "HEAD")
+    ensure_head(wt, s["branch"], head, clean=s["status"] == "review")
+    if s["status"] == "review":
+        if (set(s["evidence"]) != set(s["criteria"]) or
+                any(e["commit"] != head for e in s["evidence"].values())):
+            raise FactoryError("the existing review evidence does not cover this commit")
+        p = dict(spec=d.spec, slice=sid, repository=repo)
+        return Journal.create(d, data, {}, p, False, phase="local", head=head)
+    prior = list((run_root(d) / sid).glob("run-*"))
+    if len(prior) != 1 or prior[0].resolve() != prior[0]:
+        raise FactoryError("cannot identify the prior factory attempt; inspect the worktree")
+    # A pre-journal run lacks a saved base. The helper created the branch from
+    # a full object ID; only that original branch creation can establish it.
+    history = git(wt, "reflog", "show", "--format=%H %gs", "refs/heads/" + s["branch"]).splitlines()
+    base = history[-1].split()[0] if history else ""
+    if not base or history[-1] != f"{base} branch: Created from {base}":
+        raise FactoryError("cannot establish the legacy slice base from its branch creation")
+    git(wt, "merge-base", "--is-ancestor", base, head)
+    dirty = bool(git(wt, "status", "--porcelain", "--untracked-files=all"))
+    if dirty and not adopt_edits:
+        raise FactoryError("legacy edits have no journal; inspect them, then pass --adopt-edits to include them")
+    data, packet, p = plan(d, sid, profile or "mixed", continuing=True)
+    if p["blockers"]:
+        raise FactoryError("; ".join(p["blockers"]))
+    rounds = [int(path.name[6:]) for path in prior[0].glob("round-*") if path.name[6:].isdigit()]
+    n = max(rounds, default=1)
+    if n > p["max_build_rounds"]:
+        raise FactoryError("legacy attempt already exceeds the configured round budget")
+    phase = "editing" if dirty or head == base else "checks"
+    return Journal.create(d, data, packet, p, False,
+                          phase="recover-legacy" if s["status"] == "blocked" else phase,
+                          resume_phase=phase, base=base, head=head, round=n)
+
+
+def refresh_snapshot(d, j, draft):
+    """Allow unrelated slices to progress while a run is stopped."""
+    st = j.state
+    if st["phase"] == "start":
+        return
+    prior = st["expected"]
+    actual = d.load()
+    sid = st["plan"]["slice"]
+    s = slice_in(prior, sid)
+    live = slice_in(actual, sid)
+    if any(actual["criteria"].get(c) != prior["criteria"][c] for c in s["criteria"]):
+        raise FactoryError("acceptance criteria changed since the run; reconcile the plan")
+    if any(slice_in(actual, dep)["status"] not in {"merged", "verified"} for dep in s["depends_on"]):
+        raise FactoryError("a slice dependency is no longer recorded as merged")
+    if actual["working_agreement"] != prior["working_agreement"]:
+        if (st["phase"] not in {"local", "publish", "drafted"} or draft is None
+                or not actual["working_agreement"].strip()):
+            raise FactoryError("working agreement changed; reconcile authority before continuing")
+    # Keep the original CAS target. A pending handoff may already be installed;
+    # record() will accept either its exact before or exact after state.
+    expected = dict(actual, slices=[s if row["id"] == sid else row for row in actual["slices"]])
+    if live != s and st["phase"] not in {"handoff", "block", "attach", "recover-legacy"}:
+        raise FactoryError("delivery record changed during this run; reconcile the handoff")
+    if expected != prior:
+        j.save(st["phase"], expected=expected)
+
+
+def record(d, j, operation, fields):
+    """Reconcile both sides of a crash between tracked and local state writes."""
+    st = j.state
+    sid = st["plan"]["slice"]
+    prior = st["expected"]
+    updated = deepcopy(prior)
+    slice_in(updated, sid).update(fields)
+    actual = d.load()
+    if actual != updated:
+        if actual != prior:
+            raise FactoryError("delivery record changed during this run; reconcile the handoff")
+        run("sh", helper("spec-status"), d.project_map, d.spec, operation, sid,
+            input_text=json.dumps(dict(fields, expected=prior, head=st["head"])))
+    return updated
+
+
+def retry_round(j, feedback):
+    n = j.state["round"]
+    if n >= j.state["plan"]["max_build_rounds"]:
+        raise FactoryError(f"build round limit reached. Outstanding feedback: {feedback}")
+    j.save("build", round=n + 1, feedback=feedback)
+
+
+def agent_directory(directory, role):
+    # A resumed invocation must get a fresh response file.
+    if (directory / (role + ".log")).exists():
+        return Path(tempfile.mkdtemp(prefix=role + "-", dir=directory))
+    return directory
+
+
+def candidate_step(d, j, wt, branch):
+    st = j.state
+    phase, head, p = st["phase"], st["head"], st["plan"]
+    n = st["round"]
+    directory = j.path.parent / f"round-{n}"
+    directory.mkdir(exist_ok=True)
+    if phase in {"build", "editing"}:
+        ensure_head(wt, branch, head, clean=phase == "build")
+        context = json.dumps(st["packet"], indent=2)
+        feedback = st["feedback"]
+        if phase == "editing":
+            feedback += "\nContinue from existing partial edits in this worktree. Inspect them before editing."
+        j.save("editing")
+        print(f"Round {n}: {p['roles']['builder']['agent']} building", flush=True)
+        result = invoke("builder", p["roles"]["builder"], wt,
+                        f"{BUILD}\n\n{context}\n\nPrevious feedback:\n{feedback}",
+                        agent_directory(directory, "builder"), p["timeout_seconds"])
+        ensure_head(wt, branch, head)
+        if result["outcome"] == "blocked":
+            raise FactoryError(result["summary"])
+        if git(wt, "status", "--porcelain", "--untracked-files=all"):
+            git(wt, "add", "-A")
+            j.save("commit", tree=git(wt, "write-tree"))
+        else:
+            j.save("checks")
+    elif phase == "commit":
+        current = git(wt, "rev-parse", "HEAD")
+        ensure_head(wt, branch, current)
+        message = f"{d.spec}: implement {p['slice']} (round {n})\n\nFactory-Run: {j.path.parent.name}"
+        if current == head:
+            if (git(wt, "write-tree") != st["tree"] or git(wt, "diff", "--name-only")
+                    or git(wt, "ls-files", "--others", "--exclude-standard")):
+                raise FactoryError("staged candidate changed before commit; inspect the worktree")
+            git(wt, "commit", "-m", message)
+            current = git(wt, "rev-parse", "HEAD")
+        if (git(wt, "show", "-s", "--format=%P%n%T%n%B", current)
+                != f"{head}\n{st['tree']}\n{message}"):
+            raise FactoryError("unexpected commit during recovery; inspect the slice branch")
+        j.save("checks", head=current)
+    elif phase == "checks":
+        ensure_head(wt, branch, head, clean=True)
+        if git(wt, "rev-parse", st["base"] + "^{tree}") == git(wt, "rev-parse", head + "^{tree}"):
+            retry_round(j, "The slice has no changes relative to its starting commit. Implement the requested behavior.")
+            return
+        results, feedback = check_candidate(wt, head, p["checks"], directory, p["timeout_seconds"])
+        ensure_head(wt, branch, head, clean=True)
+        if feedback:
+            retry_round(j, feedback)
+        else:
+            j.save("review", results=results)
+    elif phase == "review":
+        ensure_head(wt, branch, head, clean=True)
+        diff = git(wt, "diff", "--no-ext-diff", "--no-textconv", st["base"], head, "--")
+        review_input = dict(base=st["base"], candidate=head, diff=diff, check_results=st["results"])
+        print(f"Round {n}: {p['roles']['reviewer']['agent']} reviewing {head}", flush=True)
+        result = invoke("reviewer", p["roles"]["reviewer"], wt,
+                        REVIEW + "\n" + json.dumps(st["packet"]) + "\n" + json.dumps(review_input),
+                        agent_directory(directory, "reviewer"), p["timeout_seconds"])
+        ensure_head(wt, branch, head, clean=True)
+        if result["outcome"] == "blocked":
+            raise FactoryError(result["summary"])
+        if result["outcome"] == "changes":
+            retry_round(j, result["summary"])
+        else:
+            evidence = {c: {"commit": head, "check": "Passed: " + ", ".join(map(shlex.join, p["checks"]["criterion " + c]))}
+                        for c in p["criteria"]}
+            note = f"Local checks passed. {p['roles']['reviewer']['agent']} approved: {result['summary']}"
+            j.save("handoff", fields=dict(status="review", evidence=evidence, note=note))
+    else:
+        raise FactoryError(f"unknown factory stage {phase}")
+
+
+def finish_review(d, j, wt):
+    st = j.state
+    sid = st["plan"]["slice"]
+    s = slice_in(st["expected"], sid)
+    head = st["head"]
+
+    def validate():
+        if d.load() != st["expected"]:
+            raise FactoryError("delivery record changed before draft PR handoff")
+        if not st["expected"]["working_agreement"].strip():
+            raise FactoryError("record the authorized scope in the working agreement")
+        ensure_head(wt, s["branch"], head, clean=True)
+        if (s["status"] != "review" or set(s["evidence"]) != set(s["criteria"])
+                or any(e["commit"] != head for e in s["evidence"].values())):
+            raise FactoryError("draft PR requires current evidence for every criterion")
+
+    ensure_head(wt, s["branch"], head, clean=True)
+    phase = st["phase"]
+    if phase == "attach" or (phase == "drafted" and st["draft"]):
+        # A previous process already observed the remote side effect. Only read
+        # GitHub here, even if someone subsequently changed the remote branch.
+        recorded = dict(s, pr=st["fields"]["pr"]) if phase == "attach" else s
+        repo = d.repos[s["repo"]]
+        pr = lookup(repo["url"], recorded)
+        verify_draft(pr, recorded, repo["default"], head)
+        if phase == "attach":
+            expected = record(d, j, "record-draft", st["fields"])
+            j.save("drafted", expected=expected)
+        print("Draft PR:", pr["url"])
+    elif st["draft"]:
+        validate()
+        j.save("publish")
+        pr = publish(d, s, wt, head, st["expected"]["criteria"], validate)
+        fields = dict(pr=pr["number"], note=f"{s['note']}\nDraft PR: {pr['url']}")
+        j.save("attach", fields=fields)
+        expected = record(d, j, "record-draft", fields)
+        j.save("drafted", expected=expected)
+        print("Draft PR:", pr["url"])
+    elif phase == "publish":
+        j.save("local")
+    expected = j.state["expected"]
+    s = slice_in(expected, sid)
+    print(f"Review handoff: {sid} at {head}\n{s['note']}")
+    for c, item in s["evidence"].items():
+        print(f"{c}: {item['check']}")
+    remaining = [x["id"] for x in expected["slices"] if x["id"] != sid and x["status"] != "verified"]
+    print("Other outstanding slices:", ", ".join(remaining) or "none")
+
+
+def continue_slice(d, j):
+    p = j.state["plan"]
+    sid, repo = p["slice"], p["repository"]
+    if j.state["repositories"] != d.repos:
+        raise FactoryError("selected repository or base changed since this run")
+    _, wt = d.registered_worktree(repo)
+    print("Run files:", j.path.parent, flush=True)
+    if j.state["phase"] == "start":
+        started = json.loads(run("sh", helper("start-slice"), d.project_map, d.spec, sid,
+                                 "--expect-record-stdin", "--json", "--factory-attempt", j.path.parent.name,
+                                 input_text=json.dumps(j.state["expected"])))
+        packet = dict(j.state["packet"], repository_context=context_files(d, repo))
+        j.save("build", expected=started["delivery"], head=started["base"], base=started["base"], packet=packet)
+    while True:
+        st = j.state
+        phase = st["phase"]
+        s = slice_in(st["expected"], sid)
+        if phase == "recover-legacy":
+            expected = record(d, j, "recover-interrupt", {"status": "implementing"})
+            j.save(st["resume_phase"], expected=expected)
+            continue
+        if phase in {"handoff", "block"}:
+            expected = record(d, j, "local-handoff", st["fields"])
+            j.save("local" if phase == "handoff" else "blocked", expected=expected)
+            continue
+        if phase != "attach" and d.load() != st["expected"]:
+            raise FactoryError("delivery record changed during this run; reconcile the handoff")
+        if phase == "blocked":
+            raise FactoryError(s["note"])
+        if phase in {"local", "publish", "attach", "drafted"}:
+            finish_review(d, j, wt)
+            return
+        try:
+            candidate_step(d, j, wt, s["branch"])
+        except FactoryError as exc:
+            # Logical failures retain the existing blocked handoff. Interruptions
+            # and transient infrastructure failures leave the active checkpoint.
+            if isinstance(exc, AgentUnavailable):
+                raise
+            ensure_head(wt, s["branch"], j.state["head"])
+            note = f"{str(exc)[:2000]}\nInspect {j.path.parent.relative_to(d.directory)} and the slice worktree."
+            j.save("block", fields=dict(status="blocked", note=note, evidence={}))
+
+
+def status(d, sid, remote, as_json):
+    report = json.loads(run("sh", helper("spec-status"), d.project_map, d.spec, "status", "--json"))
+    if remote:
+        report["freshness"] = "GitHub lookup requested; local refs not fetched"
+    if sid:
+        report["slices"] = [s for s in report["slices"] if s["id"] == sid]
+        if not report["slices"]:
+            raise FactoryError(f"unknown slice {sid}")
+    for s in report["slices"]:
+        j = Journal.for_slice(d, s["id"])
+        if j:
+            s["factory"] = {k: j.state.get(k) for k in ("phase", "round", "head", "draft")}
+        if remote and s.get("branch"):
+            try:
+                pr = lookup(d.repos[s["repo"]]["url"], s)
+                s["remote_pr"] = pr
+                if pr:
+                    ref, _ = d.paths(s["repo"])
+                    if (pr["isCrossRepository"] or pr["headRefName"] != s["branch"]
+                            or pr["baseRefName"] != d.repos[s["repo"]]["default"]
+                            or pr["headRefOid"] != git(ref, "rev-parse", "refs/heads/" + s["branch"])):
+                        s["warning"] = "PR repository, branch, base or commit differs from the local slice"
+            except (OSError, ValueError) as exc:
+                s["warning"] = f"remote state unverified: {exc}"
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        for s in report["slices"]:
+            progress = s.get("factory") or {}
+            print(f"{s['id']}: {s['status']} | factory: {progress.get('phase', 'no journal')} | "
+                  f"round: {progress.get('round', '-')} | commit: {progress.get('head') or '-'}")
+            if s.get("note"):
+                print(s["note"])
+            if remote:
+                pr = s.get("remote_pr")
+                print("PR:", f"{pr['url']} ({pr['state']})" if pr else "none confirmed")
+                if s.get("warning"):
+                    print(s["warning"])
+        print(report["freshness"])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("plan", "run", "resume", "status"):
+        cmd = sub.add_parser(name)
+        cmd.add_argument("spec")
+        cmd.add_argument("--slice", required=name == "run")
+        if name in {"plan", "run"}:
+            cmd.add_argument("--profile", default="mixed")
+        if name in {"plan", "run", "resume"}:
+            mode = cmd.add_mutually_exclusive_group()
+            mode.add_argument("--draft-pr", action="store_true", dest="draft", default=None,
+                              help="authorize pushing the reviewed branch and opening or reusing its draft PR")
+            mode.add_argument("--local-only", action="store_false", dest="draft",
+                              help="use a local handoff, including on resumed runs")
+        if name in {"plan", "status"}:
+            cmd.add_argument("--json", action="store_true")
+        if name == "status":
+            cmd.add_argument("--remote", action="store_true")
+        if name == "resume":
+            cmd.add_argument("--profile", help="profile for a pre-journal attempt")
+            cmd.add_argument("--adopt-edits", action="store_true",
+                             help="include existing edits when recovering a pre-journal run")
+    args = parser.parse_args()
+    os.environ["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        d = Delivery("project-repositories.yaml", args.spec)
+        if args.command == "status":
+            status(d, args.slice, args.remote, args.json)
+            return 0
+        if args.command in {"plan", "run"}:
+            data, packet, preview = plan(d, args.slice, args.profile)
+            if args.draft:
+                preview["handoff"] = "Push the reviewed commit and open or reuse its draft PR."
+            if args.command == "plan" and args.json:
+                print(json.dumps(preview, indent=2))
+            else:
+                print_plan(preview)
+            if args.command == "plan":
+                return 0
+            if preview["blockers"]:
+                raise FactoryError("resolve the preview blockers before running")
+        root = run_root(d)
+        root.mkdir(exist_ok=True)
+        with exclusive(root):
+            if args.command == "resume":
+                journal = Journal.find(d, args.slice)
+                if journal is None:
+                    journal = adopt_legacy(d, args.slice, args.adopt_edits, args.profile)
+                elif args.profile and args.profile != journal.state["plan"].get("profile"):
+                    raise FactoryError("a journalled run uses its saved profile")
+                if args.draft is False:
+                    journal.save(journal.state["phase"], draft=False)
+                refresh_snapshot(d, journal, args.draft)
+                if args.draft:
+                    journal.save(journal.state["phase"], draft=True)
+            else:
+                for role in preview["roles"].values():
+                    if not shutil.which(role["agent"]):
+                        raise FactoryError(f"install {role['agent']} or select another profile")
+                journal = Journal.create(d, data, packet, preview, bool(args.draft))
+            continue_slice(d, journal)
+        return 0
+    except KeyboardInterrupt:
+        print("Factory interrupted. Use factory resume to continue from the saved stage.", file=sys.stderr)
+        return 130
+    except (ValueError, TypeError, KeyError, AttributeError, OSError) as exc:
+        print(f"factory: {exc}", file=sys.stderr)
+        return 1

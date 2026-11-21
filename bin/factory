@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Run from the meta-repo root."""
+
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root / ".claude/skills/_shared"))
+sys.path.insert(0, str(root / "factory"))
+from runner import main
+
+sys.exit(main())

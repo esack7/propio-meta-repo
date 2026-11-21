@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "mixed": {
+      "builder": {"agent": "codex", "model": "gpt-6.1-sol"},
+      "reviewer": {"agent": "claude", "model": "claude-opus-5-5"}
+    },
+    "claude": {"builder": "claude", "reviewer": "claude"},
+    "codex": {"builder": "codex", "reviewer": "codex"}
+  },
+  "max_build_rounds": 3,
+  "timeout_seconds": 1200,
+  "repo_checks": {
+    "propio-agent": [["npm", "test"], ["npm", "run", "build"], ["npm", "run", "format:check"], ["npx", "fallow", "audit"]],
+    "propio-providers": [["npm", "test"], ["npm", "run", "build"], ["npm", "run", "format:check"], ["npx", "fallow", "audit"]]
+  }
+}
