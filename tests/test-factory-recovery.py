@@ -164,6 +164,36 @@ if builder:
         self.factory("resume")
         self.assertEqual(self.git(self.wt(), "show", "HEAD:partial.txt"), "work in progress")
 
+    def test_rejected_commit_records_blocker_once(self):
+        hooks = self.base / "hooks"
+        hooks.mkdir()
+        attempts = self.base / "commit-attempts"
+        self.env["COMMIT_ATTEMPTS"] = str(attempts)
+        hook = hooks / "commit-msg"
+        hook.write_text('#!/bin/sh\necho attempt >> "$COMMIT_ATTEMPTS"\necho "missing ticket trailer" >&2\nexit 1\n')
+        hook.chmod(0o755)
+        self.git(self.wt(), "config", "core.hooksPath", str(hooks))
+        self.assertIn("missing ticket trailer", self.start_run(ok=False))
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "blocked")
+        self.assertEqual(self.journal()["phase"], "blocked")
+        self.assertIn("missing ticket trailer", self.data["slices"][0]["note"])
+        self.assertEqual(self.git(self.wt(), "rev-parse", "HEAD"), self.journal()["base"])
+        self.assertEqual(self.git(self.wt(), "diff", "--cached", "--name-only"), "greeting.txt")
+        self.assertIn("missing ticket trailer", self.factory("resume", ok=False))
+        self.assertEqual(attempts.read_text().splitlines(), ["attempt"])
+
+    def test_commit_created_before_command_reports_failure(self):
+        self.env["REAL_GIT"] = shutil.which("git")
+        self.shim("git", '#!/bin/sh\ncase " $* " in\n'
+                  '  *" commit "*) "$REAL_GIT" "$@" || exit $?; exit 1 ;;\n'
+                  '  *) exec "$REAL_GIT" "$@" ;;\nesac\n')
+        self.start_run()
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "review")
+        self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "3")
+        self.assertEqual(self.journal()["head"], self.git(self.wt(), "rev-parse", "HEAD"))
+
     def test_signing_timeout_resumes_with_a_signed_commit(self):
         signer = shutil.which("ssh-keygen")
         if not signer or "gpg.ssh.allowedSignersFile" not in self.git(self.wt(), "help", "--config"):

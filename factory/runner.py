@@ -206,9 +206,9 @@ def candidate_step(d, j, wt, branch):
             log = directory / "commit.log"
             rc = process(["git", "-c", "core.logAllRefUpdates=true", "commit", "-m", message],
                          wt, "", log, p["timeout_seconds"], env=dict(os.environ, GIT_REFLOG_ACTION=action))
-            if rc:
-                raise AgentUnavailable(f"git commit exited {rc}; inspect {log} and resume: {tail(log, 1000)}")
             current = git(wt, "rev-parse", "HEAD")
+            if rc and current == head:
+                raise FactoryError(f"git commit exited {rc} without creating a commit; inspect {log}: {tail(log, 1000)}")
         # Hooks may reformat staged files or rewrite the message. The reflog
         # identifies our branch update even after a crash before journal.save.
         entry = git(wt, "reflog", "show", "-1", "--format=%H %gs", "refs/heads/" + branch)

@@ -35,7 +35,7 @@ The CLI supplies its default model when the role omits one. Set `max_build_round
 
 The runner commits each round's edits to the registered slice branch. It checks the candidate commit, sends the full slice diff and check outcomes to a fresh reviewer, and reruns checks and review after fixes. On approval, `delivery.json` records `review`, the reviewed commit, and the checks that passed for each criterion. Review the local branch and delivery change before proceeding with the normal PR workflow.
 
-Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If a signer or hook exceeds `timeout_seconds`, the commit stage can be resumed after the cause is resolved.
+Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If Git exits with an error before creating a commit, the factory records a blocked handoff with Git's diagnostics and preserves the staged changes. If a signer or hook exceeds `timeout_seconds`, the commit stage can be resumed after the cause is resolved.
 
 ## Resume a run
 
