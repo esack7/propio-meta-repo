@@ -122,6 +122,13 @@ reopening; the helper does not guess from array position.
 
 ## Completion and cleanup
 
+Run `bin/factory verify <spec>` to reconcile integrated slices and record their
+`merge_evidence`. The receipt includes the reviewed branch head, configured base,
+integrated commit and proof method. A consumer slice can declare `package_checks`
+for a producer in its dependencies. Its `package_evidence` records passing reports
+for the exact producer and consumer commits. Use `bin/factory run <spec>` to
+advance slices whose dependencies have verified. [Multi-repo factory usage](software-factory.md#advance-and-verify-a-whole-spec)
+
 Completion requires every planned slice verified and every criterion covered.
 Normal close additionally verifies the retained branch head is in the fetched
 default branch, or that a GitHub PR with that exact head and expected base merged

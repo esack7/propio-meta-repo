@@ -66,3 +66,7 @@ Factory recovery tests interrupt real local processes during branch registration
 commit, and draft PR creation. They check worktree preservation, worker exclusion, and PR reuse
 using local Git remotes and a simulated GitHub CLI. Run them with
 `python3 tests/test-factory-recovery.py`.
+
+Run `python3 tests/test-factory-spec.py` for the multi-repository pilot. It exercises
+dependency ordering, exact PR-head and squash proof, offline npm candidate installation,
+the published-package gate, and invalidation of stale acceptance evidence.

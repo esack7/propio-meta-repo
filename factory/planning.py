@@ -5,7 +5,7 @@ from pathlib import Path
 import shlex
 
 from agents import FactoryError, role_config
-from delivery import SHARED, run
+from delivery import SHARED, eligible_predecessor, run
 
 
 def helper(name):
@@ -76,7 +76,11 @@ def plan(d, sid, profile, continuing=False):
     if not data["slices"]:
         raise FactoryError("populate delivery.json with criteria and planned slices first")
     if not sid:
-        sid = next((s["id"] for s in data["slices"] if s["status"] == "planned"), None)
+        planned = [s for s in data["slices"] if s["status"] == "planned"]
+        merged = {s["id"] for s in data["slices"] if eligible_predecessor(s)}
+        busy = {s["repo"] for s in data["slices"] if s.get("branch") and s["id"] not in merged}
+        ready = [s for s in planned if s["repo"] not in busy and merged.issuperset(s["depends_on"])]
+        sid = (ready or planned)[0]["id"] if planned else None
     s = next((s for s in data["slices"] if s["id"] == sid), None)
     if not s:
         raise FactoryError("no matching planned slice; select a slice with --slice")
@@ -97,8 +101,9 @@ def plan(d, sid, profile, continuing=False):
         blockers.append("the selected worktree has local changes")
     for other in data["slices"]:
         prior = other.get("branch") and other["branch"] == row.get("branch") and other["repo"] == repo
-        if other["id"] != sid and (prior or other["id"] in s["depends_on"]) and other["status"] not in {"merged", "verified"}:
-            blockers.append(f"{other['id']} must merge first (currently {other['status']})")
+        if other["id"] != sid and (prior or other["id"] in s["depends_on"]) and not eligible_predecessor(other):
+            action = "be verified" if other["status"] == "merged" else "merge"
+            blockers.append(f"{other['id']} must {action} first (currently {other['status']})")
     required = cfg["repo_checks"].get(repo)
     if required is None:
         blockers.append(f"configure repo_checks for {repo} in factory/config.json")
@@ -115,13 +120,14 @@ def plan(d, sid, profile, continuing=False):
     packet = {"spec": d.spec, "slice": sid, "repository": repo, "slice_note": s.get("note", ""),
               "working_agreement": data["working_agreement"],
               "criteria": {c: data["criteria"][c] for c in s["criteria"]},
-              "documents": docs, "repository_context": repo_context, "checks": checks}
+              "documents": docs, "repository_context": repo_context, "checks": checks,
+              "package_checks": s.get("package_checks", [])}
     preview = {"spec": d.spec, "slice": sid, "repository": repo,
                "worktree": str(d.directory / "repos" / repo), "depends_on": s["depends_on"],
                "profile": profile, "roles": roles, "criteria": packet["criteria"],
                "working_agreement": data["working_agreement"],
                "documents": list(docs), "repository_context": list(repo_context),
-               "checks": checks, "max_build_rounds": cfg["max_build_rounds"],
+               "checks": checks, "package_checks": packet["package_checks"], "max_build_rounds": cfg["max_build_rounds"],
                "timeout_seconds": cfg["timeout_seconds"], "blockers": blockers,
                "handoff": "Local commit, check evidence, independent review. Inspect the branch for PR preparation."}
     return data, packet, preview
@@ -141,6 +147,9 @@ def print_plan(p):
             print(f"Check ({label}): {shlex.join(argv)}")
     for reason in p["blockers"]:
         print("Blocked:", reason)
+    for gate in p["package_checks"]:
+        print(f"Package ({gate.get('mode', 'candidate')}): {gate['producer_slice']} → {p['slice']}, "
+              f"scripts: {', '.join(gate['checks'])}")
     print(f"Limit: {p['max_build_rounds']} build rounds, {p['timeout_seconds']}s per command")
     print("Handoff:", p["handoff"])
     print("Start-slice verifies current remote dependencies and branch eligibility at run time.")

@@ -1,6 +1,6 @@
 ---
 name: factory
-description: Preview, run, or resume a software factory slice with Claude Code or Codex, including authorized draft PR handoff.
+description: Build and review spec slices with Claude Code or Codex, resume interrupted work, hand off authorized draft PRs, and verify multi-repository delivery.
 ---
 
 Read and follow the canonical [factory skill](../../../.claude/skills/factory/SKILL.md).

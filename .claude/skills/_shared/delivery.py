@@ -12,11 +12,16 @@ import re
 import subprocess
 import sys
 import tempfile
+import package_evidence
 
 SHARED = Path(__file__).resolve().parent
 STATES = {"planned", "implementing", "review", "blocked", "merged", "verified"}
 SLUG = r"[a-z0-9][a-z0-9-]*"
 HELD_LOCKS = set()
+
+
+class AwaitingMerge(ValueError):
+    """The remote history does not yet contain the reviewed change."""
 
 
 @contextmanager
@@ -47,6 +52,20 @@ def run(*args, cwd=None, input_text=None):
 
 def git(path, *args):
     return run("git", "-C", path, *args)
+
+
+def is_ancestor(path, commit, ref):
+    p = subprocess.run(["git", "-C", path, "merge-base", "--is-ancestor", commit, ref],
+                       text=True, capture_output=True, pass_fds=tuple(HELD_LOCKS))
+    if p.returncode not in (0, 1):
+        raise ValueError(p.stderr.strip() or "cannot read Git ancestry")
+    return p.returncode == 0
+
+
+def eligible_predecessor(s):
+    # Manually managed delivery records can advance immediately after merge.
+    return s["status"] == "verified" or (s["status"] == "merged" and
+                                         not (s.get("merge_evidence") or s.get("package_checks")))
 
 
 def atomic_json(path, value):
@@ -189,6 +208,13 @@ class Delivery:
                 raise ValueError(f"{sid}: blocked requires a reason and next action")
         if not isinstance(data.get("working_agreement"), str):
             raise ValueError("working_agreement must record the user-authorized scope")
+        by_id = {s["id"]: s for s in data["slices"]}
+        for s in data["slices"]:
+            list(package_evidence.gates(s, by_id))
+            if not isinstance(s.get("package_evidence", []), list):
+                raise ValueError("package_evidence must be a list of package reports")
+            if not isinstance(s.get("merge_evidence", {}), dict):
+                raise ValueError("merge_evidence must be an object")
 
     def paths(self, name):
         ref = self.root / "repos" / name
@@ -210,30 +236,37 @@ class Delivery:
 
     def evidence_errors(self, data):
         errors = []
+        by_id = {s["id"]: s for s in data["slices"]}
         for s in data["slices"]:
             if s["status"] != "verified":
                 continue
             try:
                 ref, _ = self.paths(s["repo"])
-                head = git(ref, "rev-parse", "refs/heads/" + s["branch"])
-                for e in s["evidence"].values():
-                    if e["commit"] != head:
-                        raise ValueError(
-                            "evidence is stale for the current branch head"
-                        )
-                    git(ref, "cat-file", "-e", e["commit"] + "^{commit}")
-                    git(
-                        ref,
-                        "merge-base",
-                        "--is-ancestor",
-                        e["commit"],
-                        "refs/heads/" + s["branch"],
-                    )
+                head = git(ref, "rev-parse", "--verify", "refs/heads/" + s["branch"] + "^{commit}")
+                if s.get("merge_evidence") and s["merge_evidence"].get("head") != head:
+                    raise ValueError("merge evidence is stale for the current branch head")
+                self.check_acceptance(s, data["criteria"], head)
+                package_evidence.require_reports(s, by_id)
             except ValueError as exc:
                 errors.append(
                     f"{s['id']}: evidence is missing or no longer on its branch: {exc}"
                 )
         return errors
+
+    def check_acceptance(self, s, criteria, head):
+        if set(s.get("evidence", {})) != set(s["criteria"]):
+            raise ValueError("missing reviewed evidence for one or more assigned criteria")
+        for c, e in s["evidence"].items():
+            if e["commit"] != head:
+                raise ValueError("evidence is stale for the current branch head")
+            if "criterion" in e and (e["criterion"] != criteria[c] or
+                                     e.get("commands") != s.get("factory_checks", {}).get(c)):
+                raise ValueError(f"{c}: criterion or commands changed after review")
+        _, wt = self.paths(s["repo"])
+        if wt.exists():
+            self.registered_worktree(s["repo"])
+            if git(wt, "symbolic-ref", "--short", "HEAD") == s["branch"] and git(wt, "status", "--porcelain", "--untracked-files=all"):
+                raise ValueError("reviewed worktree has uncommitted edits")
 
     def completion_errors(self, data):
         errors = self.evidence_errors(data)
@@ -267,13 +300,15 @@ class Delivery:
                 "pr",
                 "view",
                 str(s["pr"]),
+                "--repo",
+                self.repos[s["repo"]]["url"],
                 "--json",
-                "state,headRefName,headRefOid,baseRefName,mergeCommit,url",
+                "state,isCrossRepository,headRefName,headRefOid,baseRefName,mergeCommit,url",
                 cwd=ref,
             )
         )
         if (
-            p["headRefName"] != s["branch"]
+            p["isCrossRepository"] or p["headRefName"] != s["branch"]
             or p["baseRefName"] != self.repos[s["repo"]]["default"]
         ):
             raise ValueError(f"{s['id']}: PR branch/base mismatch")
@@ -282,17 +317,36 @@ class Delivery:
             raise ValueError(f"{s['id']}: PR head differs from retained local branch")
         return p
 
-    def merged(self, s):
+    def merged(self, s, *, require_pr=False):
         ref, _ = self.paths(s["repo"])
         base = "refs/remotes/origin/" + self.repos[s["repo"]]["default"]
-        head = git(ref, "rev-parse", "refs/heads/" + s["branch"])
+        head = git(ref, "rev-parse", "--verify", "refs/heads/" + s["branch"] + "^{commit}")
+        proof = {"head": head, "base": self.repos[s["repo"]]["default"]}
+        if not (s.get("pr") and require_pr):
+            if is_ancestor(ref, head, base):
+                return dict(proof, commit=head, method="ancestry")
+            if not s.get("pr"):
+                raise AwaitingMerge(f"{s['id']}: head is not on the default branch; no PR recorded")
+        p = self.pr_state(s)
+        if p["state"] == "OPEN":
+            raise AwaitingMerge(f"{s['id']}: PR #{s['pr']} is open")
+        if p["state"] != "MERGED" or not p.get("mergeCommit"):
+            raise ValueError(f"{s['id']}: PR is not merged")
+        commit = p["mergeCommit"]["oid"]
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise ValueError(f"{s['id']}: invalid PR merge commit")
         try:
-            git(ref, "merge-base", "--is-ancestor", head, base)
-        except ValueError:
-            p = self.pr_state(s)
-            if p["state"] != "MERGED" or not p.get("mergeCommit"):
-                raise ValueError(f"{s['id']}: PR is not merged")
-            git(ref, "merge-base", "--is-ancestor", p["mergeCommit"]["oid"], base)
+            git(ref, "merge-base", "--is-ancestor", commit, base)
+        except ValueError as exc:
+            raise ValueError(f"{s['id']}: PR merge commit is absent from the fetched default branch") from exc
+        return dict(proof, commit=commit, method="pull_request", pr=s["pr"])
+
+    def confirm_merge(self, s, *, require_pr=False):
+        recorded = s.get("merge_evidence")
+        actual = self.merged(s, require_pr=bool(recorded) or require_pr)
+        if recorded and actual != recorded:
+            raise ValueError(f"{s['id']}: recorded merge proof changed; reconcile the spec")
+        return actual
 
 
 def registered_plan(planned, sid, branch):
@@ -401,6 +455,8 @@ def execute(args):
         elif status != "blocked" or evidence:
             raise ValueError("local handoff must request review or record a blocker")
         s.update(status=status, note=result["note"], evidence=evidence)
+        if "package_evidence" in result:
+            s["package_evidence"] = result["package_evidence"]
         d.validate(data)
         atomic_json(d.path, data)
         return
@@ -454,7 +510,7 @@ def execute(args):
                         )
                         break
                     try:
-                        d.merged(s)
+                        d.confirm_merge(s)
                     except ValueError as exc:
                         errors.append(f"{s['id']}: {exc}")
         if errors:
@@ -522,19 +578,32 @@ def execute(args):
             raise ValueError("current worktree branch is not registered")
         git(ref, "fetch", "origin", "--prune")
         base = "refs/remotes/origin/" + d.repos[s["repo"]]["default"]
+        required = set(s["depends_on"])
         if previous:
-            if previous["status"] not in {"merged", "verified"}:
-                raise ValueError("current slice has not merged")
-            d.merged(previous)
+            required.add(previous["id"])
         else:
             git(ref, "merge-base", "--is-ancestor", git(wt, "rev-parse", "HEAD"), base)
-        # Validate cross-repository dependencies against freshly fetched refs too.
+        # Factory verification covers the complete dependency chain.
+        for dep in reversed(data["slices"]):
+            if dep["id"] in required and (dep.get("merge_evidence") or dep.get("package_checks")):
+                required.update(dep["depends_on"])
+        by_id = {row["id"]: row for row in data["slices"]}
+        fetched = {ref}
         for dep in data["slices"]:
-            if dep["id"] in s["depends_on"]:
-                dep_ref, _ = d.paths(dep["repo"])
-                if dep_ref != ref:
-                    git(dep_ref, "fetch", "origin", "--prune")
-                d.merged(dep)
+            if dep["id"] not in required:
+                continue
+            if dep["status"] not in {"merged", "verified"}:
+                raise ValueError(f"{dep['id']}: preceding slice has not merged")
+            dep_ref, _ = d.paths(dep["repo"])
+            if dep_ref not in fetched:
+                git(dep_ref, "fetch", "origin", "--prune")
+                fetched.add(dep_ref)
+            proof = d.confirm_merge(dep, require_pr=bool(args.factory_attempt))
+            if dep.get("merge_evidence") or dep.get("package_checks"):
+                if dep["status"] != "verified":
+                    raise ValueError(f"{dep['id']}: verify the predecessor before starting this slice")
+                d.check_acceptance(dep, data["criteria"], proof["head"])
+                package_evidence.require_reports(dep, by_id)
         refs = git(
             ref,
             "for-each-ref",

@@ -1,4 +1,4 @@
-"""Preview, implement, and resume a delivery slice."""
+"""Build, review, resume, and verify multi-repository delivery slices."""
 
 import argparse
 import json
@@ -11,9 +11,11 @@ import sys
 import tempfile
 
 from agents import AgentUnavailable, FactoryError, invoke, process, tail
-from delivery import Delivery, exclusive, git, run
+from delivery import Delivery, eligible_predecessor, exclusive, git, run
 from drafts import lookup, publish, verify_draft
 from journal import Journal, run_root
+from package_evidence import require_reports
+from spec_delivery import package_reports, package_sources, reconcile, show_verification
 from planning import context_files, helper, plan, print_plan
 
 BUILD = """Implement only this slice in the current worktree. You own source edits.
@@ -115,8 +117,13 @@ def refresh_snapshot(d, j, draft):
     live = slice_in(actual, sid)
     if any(actual["criteria"].get(c) != prior["criteria"][c] for c in s["criteria"]):
         raise FactoryError("acceptance criteria changed since the run; reconcile the plan")
-    if any(slice_in(actual, dep)["status"] not in {"merged", "verified"} for dep in s["depends_on"]):
-        raise FactoryError("a slice dependency is no longer recorded as merged")
+    for dep in s["depends_on"]:
+        new = slice_in(actual, dep)
+        if not eligible_predecessor(new):
+            raise FactoryError(f"{dep}: dependency needs merge and verification before resuming")
+        old = slice_in(prior, dep).get("merge_evidence")
+        if old and new.get("merge_evidence") != old:
+            raise FactoryError(f"{dep}: dependency merge changed since the run; reconcile the handoff")
     if actual["working_agreement"] != prior["working_agreement"]:
         if (st["phase"] not in {"local", "publish", "drafted"} or draft is None
                 or not actual["working_agreement"].strip()):
@@ -205,15 +212,27 @@ def candidate_step(d, j, wt, branch):
             retry_round(j, "The slice has no changes relative to its starting commit. Implement the requested behavior.")
             return
         results, feedback = check_candidate(wt, head, p["checks"], directory, p["timeout_seconds"])
+        reports = []
+        consumer = slice_in(st["expected"], p["slice"])
+        if not feedback and consumer.get("package_checks"):
+            slices = package_sources(d, consumer, st["expected"])
+            try:
+                reports = package_reports(d, consumer, slices, head, directory, p["timeout_seconds"])
+            except AgentUnavailable:
+                raise
+            except FactoryError as exc:
+                feedback = str(exc)
         ensure_head(wt, branch, head, clean=True)
         if feedback:
             retry_round(j, feedback)
         else:
-            j.save("review", results=results)
+            j.save("review", results=results, package_reports=reports)
     elif phase == "review":
         ensure_head(wt, branch, head, clean=True)
         diff = git(wt, "diff", "--no-ext-diff", "--no-textconv", st["base"], head, "--")
         review_input = dict(base=st["base"], candidate=head, diff=diff, check_results=st["results"])
+        if st.get("package_reports"):
+            review_input["package_reports"] = st["package_reports"]
         print(f"Round {n}: {p['roles']['reviewer']['agent']} reviewing {head}", flush=True)
         result = invoke("reviewer", p["roles"]["reviewer"], wt,
                         REVIEW + "\n" + json.dumps(st["packet"]) + "\n" + json.dumps(review_input),
@@ -224,10 +243,14 @@ def candidate_step(d, j, wt, branch):
         if result["outcome"] == "changes":
             retry_round(j, result["summary"])
         else:
-            evidence = {c: {"commit": head, "check": "Passed: " + ", ".join(map(shlex.join, p["checks"]["criterion " + c]))}
+            evidence = {c: {"commit": head, "criterion": p["criteria"][c], "commands": p["checks"]["criterion " + c],
+                            "check": "Passed: " + ", ".join(map(shlex.join, p["checks"]["criterion " + c]))}
                         for c in p["criteria"]}
             note = f"Local checks passed. {p['roles']['reviewer']['agent']} approved: {result['summary']}"
-            j.save("handoff", fields=dict(status="review", evidence=evidence, note=note))
+            fields = dict(status="review", evidence=evidence, note=note)
+            if st.get("package_reports"):
+                fields["package_evidence"] = st["package_reports"]
+            j.save("handoff", fields=fields)
     else:
         raise FactoryError(f"unknown factory stage {phase}")
 
@@ -244,9 +267,9 @@ def finish_review(d, j, wt):
         if not st["expected"]["working_agreement"].strip():
             raise FactoryError("record the authorized scope in the working agreement")
         ensure_head(wt, s["branch"], head, clean=True)
-        if (s["status"] != "review" or set(s["evidence"]) != set(s["criteria"])
-                or any(e["commit"] != head for e in s["evidence"].values())):
+        if s["status"] != "review":
             raise FactoryError("draft PR requires current evidence for every criterion")
+        d.check_acceptance(s, st["expected"]["criteria"], head)
 
     ensure_head(wt, s["branch"], head, clean=True)
     phase = st["phase"]
@@ -263,6 +286,8 @@ def finish_review(d, j, wt):
         print("Draft PR:", pr["url"])
     elif st["draft"]:
         validate()
+        if s.get("package_checks"):
+            require_reports(s, package_sources(d, s, st["expected"], refresh=True), head)
         j.save("publish")
         pr = publish(d, s, wt, head, st["expected"]["criteria"], validate)
         fields = dict(pr=pr["number"], note=f"{s['note']}\nDraft PR: {pr['url']}")
@@ -327,6 +352,7 @@ def continue_slice(d, j):
 
 def status(d, sid, remote, as_json):
     report = json.loads(run("sh", helper("spec-status"), d.project_map, d.spec, "status", "--json"))
+    records = {s["id"]: s for s in d.load()["slices"]}
     if remote:
         report["freshness"] = "GitHub lookup requested; local refs not fetched"
     if sid:
@@ -334,6 +360,9 @@ def status(d, sid, remote, as_json):
         if not report["slices"]:
             raise FactoryError(f"unknown slice {sid}")
     for s in report["slices"]:
+        for key in ("merge_evidence", "package_evidence"):
+            if key in records[s["id"]]:
+                s[key] = records[s["id"]][key]
         j = Journal.for_slice(d, s["id"])
         if j:
             s["factory"] = {k: j.state.get(k) for k in ("phase", "round", "head", "draft")}
@@ -363,16 +392,62 @@ def status(d, sid, remote, as_json):
                 print("PR:", f"{pr['url']} ({pr['state']})" if pr else "none confirmed")
                 if s.get("warning"):
                     print(s["warning"])
-        print(report["freshness"])
+        print(f"Spec {d.spec}: {report['completion']} ({report['freshness']})")
+        for gap in report["acceptance_gaps"]:
+            print("Acceptance:", gap)
+
+
+def start_planned(d, data, packet, preview, draft):
+    for role in preview["roles"].values():
+        if not shutil.which(role["agent"]):
+            raise FactoryError(f"install {role['agent']} or select another profile")
+    journal = Journal.create(d, data, packet, preview, bool(draft))
+    continue_slice(d, journal)
+
+
+def run_spec(d, profile, draft):
+    while True:
+        report = reconcile(d)
+        verified = set(report["verified_slices"])
+        data = d.load()
+        if not data["slices"]:
+            raise FactoryError("populate delivery.json with criteria and planned slices first")
+        busy = {s["repo"] for s in data["slices"] if s.get("branch") and s["id"] not in verified}
+        for s in data["slices"]:
+            if s["status"] != "planned" or s["repo"] in busy or not verified.issuperset(s["depends_on"]):
+                continue
+            if Journal.for_slice(d, s["id"]):
+                report["issues"][s["id"]] = "interrupted start; use factory resume"
+                continue
+            planned, packet, preview = plan(d, s["id"], profile)
+            if planned != data:
+                raise FactoryError("delivery record changed during scheduling; retry the run")
+            if preview["blockers"]:
+                report["issues"][s["id"]] = "; ".join(preview["blockers"])
+                continue
+            if draft:
+                preview["handoff"] = "Push the reviewed commit and open or reuse its draft PR."
+            print_plan(preview)
+            try:
+                start_planned(d, planned, packet, preview, draft)
+            except FactoryError:
+                if slice_in(d.load(), s["id"])["status"] != "blocked":
+                    raise
+            break
+        else:
+            show_verification(report)
+            pending = len(verified) < report["total_slices"]
+            return 1 if report["issues"] or (not pending and not report["verified"]) else 0
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan", "run", "resume", "status"):
+    for name in ("plan", "run", "resume", "status", "verify"):
         cmd = sub.add_parser(name)
         cmd.add_argument("spec")
-        cmd.add_argument("--slice", required=name == "run")
+        if name != "verify":
+            cmd.add_argument("--slice")
         if name in {"plan", "run"}:
             cmd.add_argument("--profile", default="mixed")
         if name in {"plan", "run", "resume"}:
@@ -381,7 +456,7 @@ def main():
                               help="authorize pushing the reviewed branch and opening or reusing its draft PR")
             mode.add_argument("--local-only", action="store_false", dest="draft",
                               help="use a local handoff, including on resumed runs")
-        if name in {"plan", "status"}:
+        if name in {"plan", "status", "verify"}:
             cmd.add_argument("--json", action="store_true")
         if name == "status":
             cmd.add_argument("--remote", action="store_true")
@@ -396,6 +471,18 @@ def main():
         if args.command == "status":
             status(d, args.slice, args.remote, args.json)
             return 0
+        if args.command == "verify" or (args.command == "run" and not args.slice):
+            root = run_root(d)
+            root.mkdir(exist_ok=True)
+            with exclusive(root):
+                if args.command == "run":
+                    return run_spec(d, args.profile, args.draft)
+                report = reconcile(d)
+                if args.json:
+                    print(json.dumps(report, indent=2))
+                else:
+                    show_verification(report)
+                return 0 if report["verified"] else 1
         if args.command in {"plan", "run"}:
             data, packet, preview = plan(d, args.slice, args.profile)
             if args.draft:
@@ -422,12 +509,9 @@ def main():
                 refresh_snapshot(d, journal, args.draft)
                 if args.draft:
                     journal.save(journal.state["phase"], draft=True)
+                continue_slice(d, journal)
             else:
-                for role in preview["roles"].values():
-                    if not shutil.which(role["agent"]):
-                        raise FactoryError(f"install {role['agent']} or select another profile")
-                journal = Journal.create(d, data, packet, preview, bool(args.draft))
-            continue_slice(d, journal)
+                start_planned(d, data, packet, preview, args.draft)
         return 0
     except KeyboardInterrupt:
         print("Factory interrupted. Use factory resume to continue from the saved stage.", file=sys.stderr)

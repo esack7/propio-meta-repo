@@ -1037,5 +1037,11 @@ else
 	fail 'software factory interruption recovery and draft PR handoff'
 fi
 
+if python3 "$ROOT/tests/test-factory-spec.py"; then
+	pass 'software factory multi-repository delivery and package verification'
+else
+	fail 'software factory multi-repository delivery and package verification'
+fi
+
 printf '\nTests complete: %s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

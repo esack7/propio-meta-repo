@@ -1,4 +1,4 @@
 interface:
   display_name: "Software Factory"
-  short_description: "Preview or implement one local spec slice"
+  short_description: "Build spec slices and verify multi-repo delivery"
   default_prompt: "Use $factory to preview a software factory run for a prepared spec."

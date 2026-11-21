@@ -73,7 +73,7 @@ Invoke workflows through your agent's native skill syntax or natural language.
 | Inspect delivery state | `$spec-status` | `/spec-status` | `/skill spec-status` | "what remains in this spec?" |
 | Start a PR slice | `$start-slice` | `/start-slice` | `/skill start-slice` | "start the next planned slice" |
 | Verify package artifacts | `$verify-packages` | `/verify-packages` | `/skill verify-packages` | "test a packed package against its consumer" |
-| Preview, run, or resume a factory slice | `$factory` | `/factory` | `/skill factory` | "resume the factory run for this slice" |
+| Run, resume, or verify factory delivery | `$factory` | `/factory` | `/skill factory` | "advance eligible slices" or "verify the whole spec" |
 | Link local package checkouts | `$link-local-packages` | `/link-local-packages` | `/skill link-local-packages` | "link providers into the agent locally" |
 
 Canonical skills live under `.claude/skills/<skill-name>/`. Codex discovers thin compatibility wrappers under `.agents/skills/<skill-name>/`; those wrappers point back to the canonical skill and contain no helper copies. Propio discovers the canonical definitions through `.propio/skills/<skill-name>` symlinks. Cursor discovers `link-local-packages` through `.cursor/commands/<skill-name>.md` (as `/link-local-packages`) and `.cursor/rules/<skill-name>.mdc`; both are wrappers pointing back to the canonical skill.

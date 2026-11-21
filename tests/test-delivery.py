@@ -18,6 +18,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / ".claude/skills"
 ENGINE = SKILLS / "_shared/delivery.py"
+sys.path.insert(0, str(ENGINE.parent))
 PACKAGE = SKILLS / "verify-packages/scripts/verify-packages.py"
 spec = importlib.util.spec_from_file_location("delivery", ENGINE)
 delivery = importlib.util.module_from_spec(spec)
@@ -150,6 +151,7 @@ class WorkflowFixture(unittest.TestCase):
         s = self.data["slices"][0]
         response = dict(
             state="MERGED",
+            isCrossRepository=False,
             headRefName=s["branch"],
             headRefOid=self.git(self.wt(), "rev-parse", "HEAD"),
             baseRefName="main",
