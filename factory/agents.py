@@ -2,8 +2,10 @@
 
 import json
 import os
+from pathlib import Path
 import signal
 import subprocess
+import sys
 
 from delivery import HELD_LOCKS
 
@@ -16,11 +18,12 @@ class AgentUnavailable(FactoryError):
     """A transient process failure; the saved stage can be retried."""
 
 
-def process(argv, cwd, prompt, log, timeout, stdout=None):
+def process(argv, cwd, prompt, log, timeout, stdout=None, env=None):
     """Keep full diagnostics on disk. Cancel the entire process group on timeout."""
     with log.open("wb") as output:
         child = subprocess.Popen(
-            argv, cwd=cwd, stdin=subprocess.PIPE, stdout=stdout or output,
+            [sys.executable, "-I", Path(__file__).with_name("worker.py"), str(timeout), *argv],
+            cwd=cwd, stdin=subprocess.PIPE, stdout=stdout or output, env=env,
             stderr=output, start_new_session=True, pass_fds=tuple(HELD_LOCKS),
         )
         try:

@@ -181,11 +181,24 @@ class FactoryTests(FactoryFixture):
         cfg["repo_checks"]["a"] = [[sys.executable, "-c",
                                     "from pathlib import Path; Path('README.md').write_text('dirty')"]]
         self.cfg_path.write_text(json.dumps(cfg))
-        self.assertIn("changed during verification", self.factory("run", "--slice", "first", ok=False))
+        output = self.factory("run", "--slice", "first", ok=False)
+        self.assertIn("changed during verification", output)
+        self.assertIn("README.md", output)
         self.reload()
         self.assertEqual(self.data["slices"][0]["status"], "blocked")
         self.assertEqual(self.data["slices"][0]["evidence"], {})
         self.assertEqual((self.wt() / "README.md").read_text(), "dirty")
+
+    def test_missing_check_records_blocker(self):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["repo_checks"]["a"] = [["missing-factory-test-executable"]]
+        cfg["max_build_rounds"] = 1
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.factory("run", "--slice", "first", ok=False)
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "blocked")
+        self.assertIn("Cannot launch missing-factory-test-executable", self.data["slices"][0]["note"])
 
     @unittest.skipUnless(os.environ.get("FACTORY_LIVE_PROFILE"), "opt-in authenticated CLI smoke")
     def test_live(self):

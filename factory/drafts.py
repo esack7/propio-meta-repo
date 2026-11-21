@@ -9,15 +9,25 @@ from delivery import git, run
 FIELDS = "number,url,state,isDraft,isCrossRepository,headRefName,headRefOid,baseRefName"
 
 
-def lookup(target, s):
+def lookup(target, s, for_publish=False):
     args = ["--repo", target, "--json", FIELDS]
     if s.get("pr"):
-        return json.loads(run("gh", "pr", "view", s["pr"], *args))
+        try:
+            pr = json.loads(run("gh", "pr", "view", s["pr"], *args))
+            if not isinstance(pr, dict) or pr.get("number") != s["pr"]:
+                raise ValueError("GitHub did not return the recorded PR")
+            return pr
+        except ValueError as exc:
+            raise FactoryError(f"Cannot read recorded PR #{s['pr']} in {target}: {exc}") from exc
     rows = json.loads(run("gh", "pr", "list", "--head", s["branch"], "--state", "all", *args))
     matches = [r for r in rows if r["headRefName"] == s["branch"] and not r["isCrossRepository"]]
     open_matches = [r for r in matches if r["state"] == "OPEN"]
     if len(open_matches) == 1:
         return open_matches[0]
+    if for_publish:
+        matches = [r for r in matches if r["state"] != "CLOSED"]
+        if any(r["state"] == "MERGED" for r in matches) and not open_matches:
+            raise FactoryError("a PR for this branch already merged; reconcile its delivery record")
     if len(matches) > 1:
         raise FactoryError("multiple PRs use this branch; reconcile the delivery record")
     return next(iter(matches), None)
@@ -39,12 +49,10 @@ def publish(d, s, wt, head, criteria, validate):
     base = d.repos[s["repo"]]["default"]
     branch = s["branch"]
     remote_ref = "refs/heads/" + branch
-    pr = lookup(target, s)
+    pr = lookup(target, s, for_publish=True)
 
     if pr:
         verify_draft(pr, s, base)
-    elif s.get("pr"):
-        raise FactoryError("the recorded PR could not be found")
     validate()
     if git(wt, "remote", "get-url", "--push", "--all", "origin").splitlines() != [target]:
         raise FactoryError("origin push destination differs from the selected repository")
@@ -78,11 +86,11 @@ def publish(d, s, wt, head, criteria, validate):
                     "--base", base, "--title", f"{d.spec}: {s['id']}", "--body-file", description.name)
         except ValueError:
             # GitHub may have created the draft even when the response was lost.
-            pr = lookup(target, s)
+            pr = lookup(target, s, for_publish=True)
             if pr is None:
                 raise
         else:
-            pr = lookup(target, s)
+            pr = lookup(target, s, for_publish=True)
     verify_draft(pr, s, base, head)
     validate()
     return pr

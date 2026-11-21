@@ -114,11 +114,13 @@ class SpecTests(FactoryFixture):
         self.data["slices"][1]["package_checks"][0]["mode"] = "published"
         self.data["slices"].append(self.slice("third", "a", ["second"]))
         self.save()
+        before = self.state_path.read_bytes()
         report = self.verify()
+        self.assertEqual(self.state_path.read_bytes(), before)
         self.assertIn("published package check failed", report["issues"]["second"])
         self.assertIn("second", report["waiting"]["third"])
-        self.assertIn("second must be verified", self.factory("run", "--slice", "third", ok=False))
-        self.assertIn("verify", self.engine("start", "third", ok=False))
+        self.assertIn("missing current published package evidence", self.factory("run", "--slice", "third", ok=False))
+        self.assertIn("missing current published package evidence", self.engine("start", "third", ok=False))
         self.assertEqual(calls, self.calls.read_bytes())
         # A later branch commit invalidates the retained PR head and its dependents.
         self.change()
@@ -142,6 +144,40 @@ class SpecTests(FactoryFixture):
         self.data["criteria"]["a1"] = "A different requirement"
         self.save()
         self.assertIn("changed after review", self.verify()["issues"]["first"])
+
+    def test_manual_merge_unlocks_work_without_certifying_acceptance(self):
+        self.start()
+        self.change()
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.data["slices"][0]["status"] = "merged"
+        # Reuse the same repository to exercise both the busy-repo and dependency gates.
+        self.data["slices"][1]["repo"] = "a"
+        self.save()
+        before = self.state_path.read_bytes()
+        report = self.verify()
+        self.assertEqual(report["eligible_predecessors"], ["first"])
+        self.assertEqual(report["verified_slices"], [])
+        self.assertEqual(self.state_path.read_bytes(), before)
+        self.factory("run")
+        self.reload()
+        self.assertEqual(self.data["slices"][1]["status"], "review")
+        self.assertNotIn("merge_evidence", self.data["slices"][0])
+
+    def test_dirty_verification_preserves_passing_record(self):
+        self.start()
+        self.change()
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.verified()
+        self.assertEqual(self.verify()["verified_slices"], ["first"])
+        before = self.state_path.read_bytes()
+        notes = self.wt() / "local-notes"
+        notes.write_text("keep")
+        report = self.verify()
+        self.assertIn("uncommitted", report["issues"]["first"])
+        self.assertEqual(report["eligible_predecessors"], [])
+        self.assertEqual(self.state_path.read_bytes(), before)
+        notes.unlink()
+        self.assertEqual(self.verify()["verified_slices"], ["first"])
 
     @unittest.skipUnless(shutil.which("npm"), "npm unavailable")
     def test_failed_package_check_keeps_consumer_out_of_review(self):

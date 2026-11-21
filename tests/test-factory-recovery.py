@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import runpy
 import shutil
+import sys
+import tempfile
 import time
 import unittest
 
@@ -27,7 +29,7 @@ elif args[:2] == ["pr", "view"]:
     assert state.exists() and args[2] == "17"
     print(state.read_text())
 elif args[:2] == ["pr", "create"]:
-    assert not state.exists()
+    assert not state.exists() or json.loads(state.read_text())["state"] == "CLOSED"
     assert "--draft" in args
     body = Path(args[args.index("--body-file")+1]).read_text()
     assert "Reviewed commit:" in body and "Create greeting.txt" in body
@@ -55,7 +57,8 @@ if rc == 0 and marker.exists():
     action = marker.read_text()
     if action in args and (action != "checkout" or "-b" in args):
         marker.unlink()
-        os.kill(os.getppid(), signal.SIGKILL)
+        pid = int(os.environ["FIXTURE_RUNNER_PID"]) if action == "commit" else os.getppid()
+        os.kill(pid, signal.SIGKILL)
 sys.exit(rc)
 '''
 
@@ -86,7 +89,9 @@ class RecoveryTests(FactoryFixture):
         return json.loads(path.read_text())
 
     def start_run(self, *options, ok=True):
-        return self.factory("run", "--slice", "first", *options, ok=ok)
+        binary = Path(__file__).resolve().parents[1] / "bin/factory"
+        return self.call("sh", "-c", 'export FIXTURE_RUNNER_PID=$$; exec "$@"', "sh", binary,
+                         "run", "example", "--slice", "first", *options, ok=ok, cwd=self.root)
 
     def test_interrupted_unregistered_checkout(self):
         self.crash_git("checkout")
@@ -103,12 +108,22 @@ class RecoveryTests(FactoryFixture):
         self.assertFalse(self.pr.with_suffix(".calls").exists())
 
     def test_interrupted_commit_is_reused(self):
+        hooks = self.base / "hooks"
+        hooks.mkdir()
+        for name, script in {"pre-commit": "echo formatted > formatted.txt\ngit add formatted.txt",
+                             "commit-msg": """printf '\\nChange-Id: fixture\\n' >> "$1" """}.items():
+            hook = hooks / name
+            hook.write_text("#!/bin/sh\n" + script + "\n")
+            hook.chmod(0o755)
+        self.git(self.wt(), "config", "core.hooksPath", str(hooks))
         self.crash_git("commit")
         self.start_run(ok=False)
         head = self.git(self.wt(), "rev-parse", "HEAD")
         self.assertEqual(self.journal()["phase"], "commit")
         self.factory("resume")
         self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "3")
+        self.assertEqual(self.git(self.wt(), "show", "HEAD:formatted.txt"), "formatted")
+        self.assertIn("Change-Id: fixture", self.git(self.wt(), "log", "-1", "--format=%B"))
         self.git(self.wt(), "merge-base", "--is-ancestor", head, "HEAD")
         self.assertEqual(len(self.calls.read_text().splitlines()), 5)
 
@@ -120,7 +135,7 @@ class RecoveryTests(FactoryFixture):
         self.shim("codex", source.replace('if builder:\n    if', '''if builder and not Path("partial.txt").exists():
     import signal, time
     Path("partial.txt").write_text("work in progress")
-    os.kill(os.getppid(), signal.SIGKILL)
+    os.kill(int(os.environ["FIXTURE_RUNNER_PID"]), signal.SIGKILL)
     for _ in range(300):
         if Path(os.environ["RELEASE_WORKER"]).exists(): break
         time.sleep(0.1)
@@ -149,7 +164,32 @@ if builder:
         self.factory("resume")
         self.assertEqual(self.git(self.wt(), "show", "HEAD:partial.txt"), "work in progress")
 
+    def test_signing_timeout_resumes_with_a_signed_commit(self):
+        signer = shutil.which("ssh-keygen")
+        if not signer or "gpg.ssh.allowedSignersFile" not in self.git(self.wt(), "help", "--config"):
+            self.skipTest("Git SSH signing unavailable")
+        key = self.base / "signing-key"
+        self.call(signer, "-q", "-t", "ed25519", "-N", "", "-f", key)
+        allowed = self.base / "signers"
+        allowed.write_text("fixture " + key.with_suffix(".pub").read_text())
+        gate = self.base / "wait-for-signer"
+        gate.touch()
+        self.env.update(TEST_SIGNER=signer, SIGNER_GATE=str(gate))
+        self.shim("test-signer", '#!/bin/sh\nif test -f "$SIGNER_GATE"; then exec sleep 60; fi\nexec "$TEST_SIGNER" "$@"\n')
+        for name, value in {"commit.gpgSign": "true", "gpg.format": "ssh", "user.signingKey": str(key),
+                            "gpg.ssh.program": "test-signer", "gpg.ssh.allowedSignersFile": str(allowed)}.items():
+            self.git(self.wt(), "config", name, value)
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["timeout_seconds"] = 4
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.assertIn("git timed out", self.start_run(ok=False))
+        self.assertEqual(self.journal()["phase"], "commit")
+        gate.unlink()
+        self.factory("resume")
+        self.git(self.wt(), "verify-commit", "HEAD")
+
     def test_draft_survives_lost_create_response(self):
+        self.pr.write_text(json.dumps(dict(state="CLOSED", headRefName="codex/example-first", isCrossRepository=False)))
         self.env["KILL_AFTER_CREATE"] = "1"
         self.start_run("--draft-pr", ok=False)
         self.reload()
@@ -191,16 +231,21 @@ if builder:
                                            url="https://github.example/owner/a/pull/17", headRefName=s["branch"],
                                            headRefOid=head, baseRefName="main")))
         matching = self.pr.read_text()
-        for conflict in ({"baseRefName": "release"}, {"isDraft": False}, {"state": "MERGED"}):
+        for conflict in ({"baseRefName": "release"}, {"isDraft": False}):
             self.pr.write_text(json.dumps(dict(json.loads(matching), **conflict)))
             self.assertIn("existing PR does not match", self.factory("resume", "--draft-pr", ok=False))
             self.reload()
             self.assertIsNone(self.data["slices"][0]["pr"])
+        self.pr.write_text(json.dumps(dict(json.loads(matching), state="MERGED")))
+        self.assertIn("already merged", self.factory("resume", "--draft-pr", ok=False))
         self.pr.write_text(matching)
         self.factory("resume", "--draft-pr")
         self.assertNotIn('"create"', self.pr.with_suffix(".calls").read_text())
         self.reload()
         self.assertEqual(self.data["slices"][0]["pr"], 17)
+        self.pr.unlink()
+        self.assertIn("Cannot read recorded PR #17", self.factory("resume", "--draft-pr", ok=False))
+        self.assertNotIn('"create"', self.pr.with_suffix(".calls").read_text())
 
     def test_legacy_review_requires_explicit_publish_and_current_evidence(self):
         self.start()
@@ -241,6 +286,35 @@ if builder:
         self.assertIn("--adopt-edits", self.factory("resume", ok=False))
         self.factory("resume", "--adopt-edits")
         self.assertEqual(self.git(self.wt(), "show", "HEAD:partial.txt"), "legacy edit")
+
+
+class WorkerLeaseTests(unittest.TestCase):
+    def test_background_descendant_cannot_keep_lease(self):
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root / "factory"))
+        from agents import process
+        from delivery import exclusive
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            marker = directory / "keep-running"
+            marker.touch()
+            # Fork and detach without closing descriptors, as a native tool can.
+            script = """import os, time
+from pathlib import Path
+if os.fork() == 0:
+    os.setsid()
+    for i in range(200):
+        if not Path('keep-running').exists(): break
+        time.sleep(.05)
+    os._exit(0)
+"""
+            try:
+                with exclusive(directory):
+                    self.assertEqual(process([sys.executable, "-c", script], directory, "", directory / "log", 5), 0)
+                with exclusive(directory):
+                    pass
+            finally:
+                marker.unlink()
 
 
 if __name__ == "__main__":

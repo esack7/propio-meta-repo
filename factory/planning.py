@@ -101,9 +101,13 @@ def plan(d, sid, profile, continuing=False):
         blockers.append("the selected worktree has local changes")
     for other in data["slices"]:
         prior = other.get("branch") and other["branch"] == row.get("branch") and other["repo"] == repo
-        if other["id"] != sid and (prior or other["id"] in s["depends_on"]) and not eligible_predecessor(other):
+        if other["id"] == sid or not (prior or other["id"] in s["depends_on"]):
+            continue
+        if not eligible_predecessor(other):
             action = "be verified" if other["status"] == "merged" else "merge"
             blockers.append(f"{other['id']} must {action} first (currently {other['status']})")
+        elif other["status"] == "verified":
+            blockers.extend(gap for gap in report["acceptance_gaps"] if gap.startswith(other["id"] + ":"))
     required = cfg["repo_checks"].get(repo)
     if required is None:
         blockers.append(f"configure repo_checks for {repo} in factory/config.json")

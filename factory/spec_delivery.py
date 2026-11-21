@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 from agents import FactoryError, process, tail
-from delivery import AwaitingMerge, SHARED, atomic_json, exclusive, git
+from delivery import AwaitingMerge, SHARED, atomic_json, eligible_predecessor, exclusive, git
 from journal import run_root
 from package_evidence import gates, inputs, passed
 
@@ -66,12 +66,15 @@ def reconcile(d):
     original = d.load()
     data = deepcopy(original)
     slices = {s["id"]: s for s in data["slices"]}
+    # Map eligible predecessors to freshly confirmed branch heads. A manual
+    # merge can unlock work before it has acceptance evidence of its own.
+    ready = {}
     checked, waiting, issues = [], {}, {}
     fetched = {}
     for sid, s in slices.items():
         prior_status = s["status"]
-        missing = [dep for dep in s["depends_on"] if dep not in checked]
-        dependency_wait = "awaiting verified dependencies: " + ", ".join(missing)
+        missing = [dep for dep in s["depends_on"] if dep not in ready]
+        dependency_wait = "awaiting dependencies: " + ", ".join(missing)
         if s["status"] not in {"review", "merged", "verified"}:
             if s["status"] == "blocked":
                 issues[sid] = s["note"]
@@ -91,11 +94,19 @@ def reconcile(d):
             if fetched[repo]:
                 raise FactoryError(fetched[repo])
             proof = d.merged(s, require_pr=True)
-            s.update(status="merged", merge_evidence=proof)
-            d.check_acceptance(s, data["criteria"], proof["head"])
             if missing:
                 waiting[sid] = dependency_wait
                 continue
+            if prior_status == "merged" and eligible_predecessor(s):
+                ready[sid] = proof["head"]
+                if set(s.get("evidence", {})) != set(s["criteria"]):
+                    waiting[sid] = "merge confirmed; record outstanding acceptance evidence"
+                    continue
+            outstanding = [dep for dep in s["depends_on"] if dep not in checked]
+            if outstanding:
+                waiting[sid] = "awaiting acceptance evidence for dependencies: " + ", ".join(outstanding)
+                continue
+            d.check_acceptance(s, data["criteria"], proof["head"])
             if s.get("package_checks"):
                 timeout = json.loads((d.root / "factory/config.json").read_text())["timeout_seconds"]
                 if type(timeout) is not int or timeout <= 0:
@@ -105,7 +116,8 @@ def reconcile(d):
                 s["package_evidence"] = reports
             else:
                 s.pop("package_evidence", None)
-            s["status"] = "verified"
+            s.update(status="verified", merge_evidence=proof)
+            ready[sid] = proof["head"]
             checked.append(sid)
         except AwaitingMerge as exc:
             if prior_status in {"merged", "verified"}:
@@ -118,17 +130,17 @@ def reconcile(d):
     with exclusive(d.directory):
         if (d.directory / ".delivery.lock").exists() or d.load() != original:
             raise FactoryError("delivery record changed or is locked; retry verification")
-        for sid in checked:
+        for sid, head in ready.items():
             s = slices[sid]
             ref, _ = d.paths(s["repo"])
-            if git(ref, "rev-parse", "refs/heads/" + s["branch"]) != s["merge_evidence"]["head"]:
+            if git(ref, "rev-parse", "refs/heads/" + s["branch"]) != head:
                 raise FactoryError(f"{sid}: head changed during verification; retry")
         d.validate(data)
         gaps = d.completion_errors(data)
         if data != original:
             atomic_json(d.path, data)
     return {"spec": d.spec, "verified": bool(slices) and len(checked) == len(slices) and not gaps,
-            "verified_slices": checked, "total_slices": len(slices), "waiting": waiting,
+            "verified_slices": checked, "eligible_predecessors": list(ready), "total_slices": len(slices), "waiting": waiting,
             "issues": issues, "acceptance_gaps": gaps,
             "evidence": {sid: {"merge": slices[sid]["merge_evidence"], "criteria": slices[sid]["evidence"],
                                "packages": slices[sid].get("package_evidence", [])} for sid in checked},

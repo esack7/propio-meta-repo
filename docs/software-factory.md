@@ -23,6 +23,8 @@ The preview also accepts `--json`. Omit `--slice` on a preview to inspect the fi
 3. Configure the repository's standard checks under `repo_checks` in [factory/config.json](../factory/config.json). An explicitly empty array is valid for a repository with only criterion-specific checks. Install the worktree's development dependencies as required. The runner executes the configured commands directly in the worktree, in order, and stops at the first failure. Use trusted checks and run with the credentials appropriate to those commands.
 4. The runner uses Python 3.9+, Git, and Ruby with its standard YAML library for the project map's ordered context paths. Sign in to the CLIs required for the selected profile and configure a Git author for local commits. Claude Code needs `--restricted` and `--json-schema`. Codex needs `exec --ephemeral`, `--ignore-user-config`, and `--output-schema`. The review session always starts fresh.
 
+Checks must leave tracked files clean. Direct generated output to an ignored or temporary directory. If a check edits a tracked file or leaves an untracked file, the factory preserves it and includes its path in the blocked handoff.
+
 ## Choose agents and limits
 
 The default `mixed` profile builds with Codex Sol 6.1 (`gpt-6.1-sol`) and reviews with Claude Opus 5.5 (`claude-opus-5-5`). Select `claude` or `codex` to use one CLI for both roles.
@@ -32,6 +34,8 @@ The CLI supplies its default model when the role omits one. Set `max_build_round
 ## Read the handoff
 
 The runner commits each round's edits to the registered slice branch. It checks the candidate commit, sends the full slice diff and check outcomes to a fresh reviewer, and reruns checks and review after fixes. On approval, `delivery.json` records `review`, the reviewed commit, and the checks that passed for each criterion. Review the local branch and delivery change before proceeding with the normal PR workflow.
+
+Factory commits honor repository hooks and signing settings. Checks and review use the commit produced by Git, including any hook edits. If a signer or hook exceeds `timeout_seconds`, the commit stage can be resumed after the cause is resolved.
 
 ## Resume a run
 
@@ -70,6 +74,8 @@ bin/factory verify <spec> --json
 Run the first command after preparing worktrees and again after each external merge. It fetches the configured default branches, verifies predecessor slices, and builds eligible slices in delivery order. Independent repositories can reach review in the same invocation. A repository with outstanding work waits for that slice. If an implementation was interrupted, use `resume --slice` for that slice. Add `--draft-pr` only when push and draft creation are authorized for every slice the invocation can start.
 
 Use `verify` to update `delivery.json` and check acceptance without starting agents. A recorded PR must be merged into the mapped base from the registered branch at the reviewed head. The merge commit must be reachable from the freshly fetched base. This also verifies squash merges. A slice with no recorded PR can use direct ancestry. For an externally squash-merged PR, enter its number on the slice so the factory can locate the merge.
+
+A manually recorded merge can unlock a dependent build once the factory confirms the merge. The spec still needs acceptance evidence for that predecessor to verify. Each unsuccessful verification reports the current issue and preserves the slice's last recorded status and evidence.
 
 The report names waiting slices, missing criteria, and failed checks. It exits successfully once every slice and criterion is verified. The JSON report includes reviewed heads, integrated commits, and package results. New factory reviews also bind evidence to the criterion wording and configured criterion checks. Earlier records are checked against their retained branch heads. `status` reads the last recorded state. `run` can successfully hand off slices for review while verification is still pending. Merges, releases, and worktree cleanup each have their own authorization.
 

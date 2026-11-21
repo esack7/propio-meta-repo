@@ -32,8 +32,10 @@ criteria or concrete defects, or blocked with the question that requires a decis
 def ensure_head(wt, branch, expected, clean=False):
     if git(wt, "symbolic-ref", "--short", "HEAD") != branch or git(wt, "rev-parse", "HEAD") != expected:
         raise FactoryError("the checked-out branch or commit changed unexpectedly; inspect the worktree")
-    if clean and git(wt, "status", "--porcelain", "--untracked-files=all"):
-        raise FactoryError("the candidate worktree changed during verification; inspect the edits")
+    if clean:
+        changes = git(wt, "status", "--porcelain", "--untracked-files=all")
+        if changes:
+            raise FactoryError(f"the candidate worktree changed during verification; inspect the edits:\n{changes}")
 
 
 def check_candidate(wt, head, checks, directory, timeout):
@@ -189,22 +191,36 @@ def candidate_step(d, j, wt, branch):
             raise FactoryError(result["summary"])
         if git(wt, "status", "--porcelain", "--untracked-files=all"):
             git(wt, "add", "-A")
-            j.save("commit", tree=git(wt, "write-tree"))
+            j.save("commit", tree=git(wt, "write-tree"), commit_action=f"factory-{j.path.parent.name}-round-{n}")
         else:
             j.save("checks")
     elif phase == "commit":
         current = git(wt, "rev-parse", "HEAD")
         ensure_head(wt, branch, current)
         message = f"{d.spec}: implement {p['slice']} (round {n})\n\nFactory-Run: {j.path.parent.name}"
+        action = st.get("commit_action", f"factory-{j.path.parent.name}-round-{n}")
         if current == head:
             if (git(wt, "write-tree") != st["tree"] or git(wt, "diff", "--name-only")
                     or git(wt, "ls-files", "--others", "--exclude-standard")):
                 raise FactoryError("staged candidate changed before commit; inspect the worktree")
-            git(wt, "commit", "-m", message)
+            log = directory / "commit.log"
+            rc = process(["git", "-c", "core.logAllRefUpdates=true", "commit", "-m", message],
+                         wt, "", log, p["timeout_seconds"], env=dict(os.environ, GIT_REFLOG_ACTION=action))
+            if rc:
+                raise AgentUnavailable(f"git commit exited {rc}; inspect {log} and resume: {tail(log, 1000)}")
             current = git(wt, "rev-parse", "HEAD")
-        if (git(wt, "show", "-s", "--format=%P%n%T%n%B", current)
-                != f"{head}\n{st['tree']}\n{message}"):
-            raise FactoryError("unexpected commit during recovery; inspect the slice branch")
+        # Hooks may reformat staged files or rewrite the message. The reflog
+        # identifies our branch update even after a crash before journal.save.
+        entry = git(wt, "reflog", "show", "-1", "--format=%H %gs", "refs/heads/" + branch)
+        ours = (entry.startswith(f"{current} {action}:") and
+                git(wt, "rev-list", "-1", "--parents", current) == f"{current} {head}")
+        # Older journals predate the per-round reflog marker.
+        if not ours and "commit_action" not in st:
+            identity = git(wt, "show", "-s", "--no-show-signature", "--format=%P%n%T%n%B", current)
+            expected = f"{head}\n{st['tree']}\n{message}"
+            ours = identity == expected or identity.startswith(expected + "\n")
+        if not ours:
+            raise ValueError("cannot identify the factory commit during recovery; inspect the slice branch")
         j.save("checks", head=current)
     elif phase == "checks":
         ensure_head(wt, branch, head, clean=True)
@@ -408,13 +424,13 @@ def start_planned(d, data, packet, preview, draft):
 def run_spec(d, profile, draft):
     while True:
         report = reconcile(d)
-        verified = set(report["verified_slices"])
+        ready = set(report["eligible_predecessors"])
         data = d.load()
         if not data["slices"]:
             raise FactoryError("populate delivery.json with criteria and planned slices first")
-        busy = {s["repo"] for s in data["slices"] if s.get("branch") and s["id"] not in verified}
+        busy = {s["repo"] for s in data["slices"] if s.get("branch") and s["id"] not in ready}
         for s in data["slices"]:
-            if s["status"] != "planned" or s["repo"] in busy or not verified.issuperset(s["depends_on"]):
+            if s["status"] != "planned" or s["repo"] in busy or not ready.issuperset(s["depends_on"]):
                 continue
             if Journal.for_slice(d, s["id"]):
                 report["issues"][s["id"]] = "interrupted start; use factory resume"
@@ -436,7 +452,7 @@ def run_spec(d, profile, draft):
             break
         else:
             show_verification(report)
-            pending = len(verified) < report["total_slices"]
+            pending = len(report["verified_slices"]) < report["total_slices"]
             return 1 if report["issues"] or (not pending and not report["verified"]) else 0
 
 
