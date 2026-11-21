@@ -271,6 +271,37 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(self.git(self.wt("b"), "ls-files", "package-output.tmp"), "")
         self.assertEqual(target.read_text(), "generated")
 
+    @unittest.skipUnless(shutil.which("npm"), "npm unavailable")
+    def test_package_timeout_returns_to_builder(self):
+        self.packages()
+        script = self.seeds["b"] / "test.js"
+        script.write_text(script.read_text() + "\nif (require('fs').readFileSync('behavior.txt', 'utf8') === 'hang') {\n"
+                          "console.log('package waiting for fix'); setInterval(() => {}, 1000); }\n")
+        self.git(self.seeds["b"], "add", "test.js")
+        self.git(self.seeds["b"], "commit", "-m", "package timeout fixture")
+        self.git(self.seeds["b"], "push", "origin", "main")
+        self.start()
+        (self.wt() / "greeting.txt").write_text("hello!")
+        self.git(self.wt(), "add", "greeting.txt")
+        self.git(self.wt(), "commit", "-m", "producer")
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.verified()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["timeout_seconds"] = 15
+        self.cfg_path.write_text(json.dumps(cfg))
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder:
+    if "package check timed out" in prompt:
+        Path("behavior.txt").write_text("fixed")
+    else:
+        Path("behavior.txt").write_text("hang")
+if os.environ.get("BAD_RESULT"):'''))
+        self.factory("run", "--slice", "second")
+        self.reload()
+        self.assertEqual(self.data["slices"][1]["status"], "review")
+        self.assertEqual((self.wt("b") / "behavior.txt").read_text(), "fixed")
+
 
 if __name__ == "__main__":
     unittest.main()

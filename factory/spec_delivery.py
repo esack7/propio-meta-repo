@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from agents import FactoryError, process, tail
+from agents import AgentUnavailable, FactoryError, process, tail
 from delivery import AwaitingMerge, SHARED, atomic_json, eligible_predecessor, exclusive, git
 from journal import run_root
 from package_evidence import gates, inputs, passed
@@ -51,7 +51,11 @@ def package_reports(d, consumer, slices, commit, directory, timeout, cached=()):
                    "--mode", expected["mode"], "--report", output]
         for check in expected["checks"]:
             command.extend(["--check", check])
-        rc = process(command, d.root, "", log, timeout)
+        try:
+            rc = process(command, d.root, "", log, timeout)
+        except AgentUnavailable as exc:
+            raise FactoryError(f"{expected['mode']} package check timed out after {timeout}s for "
+                               f"{expected['producer']} → {expected['consumer']}: {exc}\n{tail(log, 1500)}") from exc
         if rc:
             raise FactoryError(f"{expected['mode']} package check failed for {expected['producer']} → "
                                f"{expected['consumer']} (see {log}): {tail(log, 1500)}")

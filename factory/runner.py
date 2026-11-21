@@ -51,7 +51,12 @@ def check_candidate(wt, head, checks, directory, timeout):
                 continue
             log = directory / f"check-{len(results) + 1}.log"
             print("Check:", name, flush=True)
-            rc = process(argv, wt, "", log, timeout)
+            try:
+                rc = process(argv, wt, "", log, timeout)
+            except AgentUnavailable as exc:
+                results[name] = {"exit": 124, "timed_out": True, "log": log.name}
+                (directory / "checks.json").write_text(json.dumps({"commit": head, "results": results}, indent=2))
+                return results, f"{name} timed out after {timeout}s. {exc}\n{tail(log)}"
             results[name] = {"exit": rc, "log": log.name}
             record = {"commit": head, "results": results}
             (directory / "checks.json").write_text(json.dumps(record, indent=2))
@@ -294,8 +299,6 @@ def candidate_step(d, j, wt, branch):
             slices = package_sources(d, consumer, st["expected"])
             try:
                 reports = package_reports(d, consumer, slices, head, directory, p["timeout_seconds"])
-            except AgentUnavailable:
-                raise
             except FactoryError as exc:
                 feedback = str(exc)
             if repair_check_changes(j, wt, branch, head, feedback):

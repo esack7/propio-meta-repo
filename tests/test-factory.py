@@ -245,7 +245,7 @@ if os.environ.get("BAD_RESULT"):'''))
         builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
                            .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "checks left changes" in prompt:
     assert Path("__snapshots__/greeting.snap").read_text() == "hello!"
-    result["intended_files"] = ["./__snapshots__/"] if claude else [".\\\\__snapshots__\\\\greeting.snap"]
+    result["intended_files"] = [str(Path.cwd() / "__snapshots__")] if claude else ["__snapshots__/../__snapshots__/greeting.snap"]
 if os.environ.get("BAD_RESULT"):'''))
         reviewer = shim / reviewer_name
         reviewer.write_text(reviewer.read_text().replace('assert "check_results" in prompt',
@@ -290,6 +290,42 @@ if os.environ.get("BAD_RESULT"):'''))
                      "/tmp/outside.snap", "C:\\outside.snap", ".git/config", "./.git/", "outside/secret"):
             with self.subTest(path=path), self.assertRaises(FactoryError):
                 normalize_claims([path], self.wt())
+        (self.wt() / "src").mkdir()
+        self.assertEqual(normalize_claims(["./src/../README.md", ".\\README.md",
+                                         str(self.wt() / "README.md")], self.wt()), ["README.md"])
+
+    def test_builder_repairs_timed_out_check(self):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["timeout_seconds"] = 4
+        cfg["repo_checks"]["a"] = [[sys.executable, "-c",
+            "from pathlib import Path; import time; print('waiting for fixed behavior', flush=True); "
+            "time.sleep(60) if Path('behavior.txt').read_text() == 'hang' else None"]]
+        self.cfg_path.write_text(json.dumps(cfg))
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder:
+    if "timed out after 4s" in prompt:
+        assert "waiting for fixed behavior" in prompt
+        Path("behavior.txt").write_text("fixed")
+    else:
+        Path("behavior.txt").write_text("hang")
+if os.environ.get("BAD_RESULT"):'''))
+        self.assert_success("mixed")
+        self.assertEqual((self.wt() / "behavior.txt").read_text(), "fixed")
+        check, = self.directory.glob(".factory-runs/first/run-*/round-1/checks.json")
+        self.assertTrue(next(iter(json.loads(check.read_text())["results"].values()))["timed_out"])
+
+    def test_persistent_check_timeout_exhausts_budget(self):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg.update(timeout_seconds=4, max_build_rounds=2)
+        cfg["repo_checks"]["a"] = [[sys.executable, "-c", "import time; time.sleep(60)"]]
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.assertIn("round limit reached", self.factory("run", "--slice", "first", ok=False))
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "blocked")
+        self.assertIn("timed out after 4s", self.data["slices"][0]["note"])
 
     def test_reviewer_claims_drop_deleted_and_reverted_files(self):
         self.scripted()

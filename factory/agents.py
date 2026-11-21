@@ -28,19 +28,21 @@ def normalize_claims(paths, cwd):
     root = Path(cwd).resolve()
     claims, invalid = set(), []
     for raw in paths:
-        if not isinstance(raw, str) or not raw:
+        if not isinstance(raw, str) or not raw or "\0" in raw:
             invalid.append(repr(raw))
             continue
         path = PurePosixPath(raw.replace("\\", "/"))
-        if ("\0" in raw or path.is_absolute() or PureWindowsPath(raw).drive
-                or ".." in path.parts or ".git" in path.parts):
+        if PureWindowsPath(raw).drive:
             raise FactoryError(f"Unsafe intended_files path {raw!r}; use repository-relative paths")
-        if str(path) == ".":
+        target = (root / path).resolve()
+        if not target.is_relative_to(root):
+            raise FactoryError(f"Unsafe intended_files path {raw!r}; use repository-relative paths inside the repository")
+        path = target.relative_to(root)
+        if ".git" in path.parts:
+            raise FactoryError(f"Unsafe intended_files path {raw!r}; resolves into Git metadata")
+        if target == root:
             invalid.append(repr(raw))
             continue
-        target = root / path
-        if not target.resolve().is_relative_to(root):
-            raise FactoryError(f"Unsafe intended_files path {raw!r}; resolves outside the repository")
         if target.is_dir():
             files = git(root, "--literal-pathspecs", "ls-files", "--cached", "--others",
                         "--exclude-standard", "-z", "--", str(path))
