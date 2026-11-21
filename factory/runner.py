@@ -155,11 +155,11 @@ def record(d, j, operation, fields):
     return updated
 
 
-def retry_round(j, feedback):
+def retry_round(j, feedback, *, repair=None):
     n = j.state["round"]
     if n >= j.state["plan"]["max_build_rounds"]:
         raise FactoryError(f"build round limit reached. Outstanding feedback: {feedback}")
-    j.save("build", round=n + 1, feedback=feedback)
+    j.save("editing" if repair else "build", round=n + 1, feedback=feedback, repair=repair)
 
 
 def agent_directory(directory, role):
@@ -181,6 +181,10 @@ def candidate_step(d, j, wt, branch):
         feedback = st["feedback"]
         if phase == "editing":
             feedback += "\nContinue from existing partial edits in this worktree. Inspect them before editing."
+        if st.get("repair") == "commit":
+            feedback += ("\nRepair the staged change or the proposed message using the hook diagnostics. "
+                         "Return the full proposed commit message in summary, including any required trailers. "
+                         "Leave Git operations to the runner and keep the repository hooks enabled.")
         j.save("editing")
         print(f"Round {n}: {p['roles']['builder']['agent']} building", flush=True)
         result = invoke("builder", p["roles"]["builder"], wt,
@@ -191,24 +195,41 @@ def candidate_step(d, j, wt, branch):
             raise FactoryError(result["summary"])
         if git(wt, "status", "--porcelain", "--untracked-files=all"):
             git(wt, "add", "-A")
-            j.save("commit", tree=git(wt, "write-tree"), commit_action=f"factory-{j.path.parent.name}-round-{n}")
+            commit_message = st.get("commit_message")
+            if st.get("repair") == "commit":
+                proposed = directory / "commit-message.txt"
+                log = directory / "trailers.log"
+                with proposed.open("wb") as output:
+                    rc = process(["git", "interpret-trailers", "--if-exists", "replace",
+                                  "--trailer", f"Factory-Run: {j.path.parent.name}"], wt,
+                                 result["summary"].strip() + "\n", log, p["timeout_seconds"], stdout=output)
+                if rc:
+                    retry_round(j, f"Could not format the repaired commit message: {tail(log)}", repair="commit")
+                    return
+                commit_message = proposed.read_text().strip()
+            j.save("commit", tree=git(wt, "write-tree"), commit_action=f"factory-{j.path.parent.name}-round-{n}",
+                   commit_message=commit_message)
         else:
             j.save("checks")
     elif phase == "commit":
         current = git(wt, "rev-parse", "HEAD")
         ensure_head(wt, branch, current)
-        message = f"{d.spec}: implement {p['slice']} (round {n})\n\nFactory-Run: {j.path.parent.name}"
+        message = st.get("commit_message") or (
+            f"{d.spec}: implement {p['slice']} (round {n})\n\nFactory-Run: {j.path.parent.name}")
         action = st.get("commit_action", f"factory-{j.path.parent.name}-round-{n}")
         if current == head:
             if (git(wt, "write-tree") != st["tree"] or git(wt, "diff", "--name-only")
                     or git(wt, "ls-files", "--others", "--exclude-standard")):
                 raise FactoryError("staged candidate changed before commit; inspect the worktree")
             log = directory / "commit.log"
-            rc = process(["git", "-c", "core.logAllRefUpdates=true", "commit", "-m", message],
-                         wt, "", log, p["timeout_seconds"], env=dict(os.environ, GIT_REFLOG_ACTION=action))
+            rc = process(["git", "-c", "core.logAllRefUpdates=true", "commit", "-F", "-"],
+                         wt, message + "\n", log, p["timeout_seconds"], env=dict(os.environ, GIT_REFLOG_ACTION=action))
             current = git(wt, "rev-parse", "HEAD")
             if rc and current == head:
-                raise FactoryError(f"git commit exited {rc} without creating a commit; inspect {log}: {tail(log, 1000)}")
+                ensure_head(wt, branch, head)
+                retry_round(j, f"git commit exited {rc}. Diagnostics from {log}:\n{tail(log, 1500)}\n"
+                               f"Rejected message:\n{message}", repair="commit")
+                return
         # Hooks may reformat staged files or rewrite the message. The reflog
         # identifies our branch update even after a crash before journal.save.
         entry = git(wt, "reflog", "show", "-1", "--format=%H %gs", "refs/heads/" + branch)
@@ -228,6 +249,14 @@ def candidate_step(d, j, wt, branch):
             retry_round(j, "The slice has no changes relative to its starting commit. Implement the requested behavior.")
             return
         results, feedback = check_candidate(wt, head, p["checks"], directory, p["timeout_seconds"])
+        ensure_head(wt, branch, head)
+        changes = git(wt, "status", "--porcelain", "--untracked-files=all")
+        if changes:
+            dirty = (f"checks left changes in the worktree:\n{changes}\n"
+                     "Inspect these files and fix the cause so checks leave the candidate clean. "
+                     "Keep generated artifacts out of the commit.")
+            retry_round(j, "\n".join(filter(None, (feedback, dirty))), repair="checks")
+            return
         reports = []
         consumer = slice_in(st["expected"], p["slice"])
         if not feedback and consumer.get("package_checks"):
@@ -238,7 +267,7 @@ def candidate_step(d, j, wt, branch):
                 raise
             except FactoryError as exc:
                 feedback = str(exc)
-        ensure_head(wt, branch, head, clean=True)
+            ensure_head(wt, branch, head, clean=True)
         if feedback:
             retry_round(j, feedback)
         else:

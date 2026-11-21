@@ -103,7 +103,7 @@ def reconcile(d):
                     waiting[sid] = "merge confirmed; record outstanding acceptance evidence"
                     continue
             outstanding = [dep for dep in s["depends_on"] if dep not in checked]
-            if outstanding:
+            if outstanding and prior_status != "verified":
                 waiting[sid] = "awaiting acceptance evidence for dependencies: " + ", ".join(outstanding)
                 continue
             d.check_acceptance(s, data["criteria"], proof["head"])

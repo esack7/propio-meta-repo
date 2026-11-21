@@ -179,6 +179,32 @@ class SpecTests(FactoryFixture):
         notes.unlink()
         self.assertEqual(self.verify()["verified_slices"], ["first"])
 
+    def test_verified_middle_slice_with_manual_ancestor_unlocks_successor(self):
+        self.start()
+        self.change()
+        self.git(self.wt(), "push", "origin", "HEAD:main")
+        self.data["slices"][0]["status"] = "merged"
+        self.save()
+        self.engine("start", "second")
+        head = self.change("b")
+        self.git(self.wt("b"), "push", "origin", "HEAD:main")
+        self.reload()
+        self.data["slices"][1].update(status="verified", evidence={"b1": {"commit": head, "check": "passed"}})
+        third = self.slice("third", "b", ["second"])
+        third["factory_checks"] = self.data["slices"][0]["factory_checks"]
+        self.data["slices"].append(third)
+        self.save()
+        report = self.verify()
+        self.assertEqual(report["eligible_predecessors"], ["first", "second"])
+        self.assertEqual(report["verified_slices"], ["second"])
+        marker = self.wt("b") / "dirty"
+        marker.touch()
+        self.assertEqual(self.verify()["eligible_predecessors"], ["first"])
+        marker.unlink()
+        self.factory("run")
+        self.reload()
+        self.assertEqual([s["status"] for s in self.data["slices"]], ["merged", "verified", "review"])
+
     @unittest.skipUnless(shutil.which("npm"), "npm unavailable")
     def test_failed_package_check_keeps_consumer_out_of_review(self):
         self.packages()

@@ -178,16 +178,33 @@ class FactoryTests(FactoryFixture):
     def test_no_review_evidence_on_dirty_check(self):
         self.scripted()
         cfg = json.loads(self.cfg_path.read_text())
+        cfg["max_build_rounds"] = 1
         cfg["repo_checks"]["a"] = [[sys.executable, "-c",
                                     "from pathlib import Path; Path('README.md').write_text('dirty')"]]
         self.cfg_path.write_text(json.dumps(cfg))
         output = self.factory("run", "--slice", "first", ok=False)
-        self.assertIn("changed during verification", output)
+        self.assertIn("checks left changes", output)
         self.assertIn("README.md", output)
         self.reload()
         self.assertEqual(self.data["slices"][0]["status"], "blocked")
         self.assertEqual(self.data["slices"][0]["evidence"], {})
         self.assertEqual((self.wt() / "README.md").read_text(), "dirty")
+
+    def test_builder_repairs_check_outputs(self):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["repo_checks"]["a"] = [[sys.executable, "-c",
+            "from pathlib import Path; Path('coverage.tmp').write_text('generated')"]]
+        self.cfg_path.write_text(json.dumps(cfg))
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "checks left changes" in prompt:
+    assert "?? coverage.tmp" in prompt and Path("coverage.tmp").read_text() == "generated"
+    Path(".gitignore").write_text("coverage.tmp\\n")
+if os.environ.get("BAD_RESULT"):'''))
+        self.assert_success("mixed")
+        self.assertEqual(self.git(self.wt(), "ls-files", "coverage.tmp"), "")
+        self.assertEqual(len(self.calls.read_text().splitlines()), 3)
 
     def test_missing_check_records_blocker(self):
         self.scripted()

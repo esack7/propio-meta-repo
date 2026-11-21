@@ -164,7 +164,7 @@ if builder:
         self.factory("resume")
         self.assertEqual(self.git(self.wt(), "show", "HEAD:partial.txt"), "work in progress")
 
-    def test_rejected_commit_records_blocker_once(self):
+    def test_rejected_commit_blocks_after_bounded_repairs(self):
         hooks = self.base / "hooks"
         hooks.mkdir()
         attempts = self.base / "commit-attempts"
@@ -181,7 +181,27 @@ if builder:
         self.assertEqual(self.git(self.wt(), "rev-parse", "HEAD"), self.journal()["base"])
         self.assertEqual(self.git(self.wt(), "diff", "--cached", "--name-only"), "greeting.txt")
         self.assertIn("missing ticket trailer", self.factory("resume", ok=False))
-        self.assertEqual(attempts.read_text().splitlines(), ["attempt"])
+        limit = json.loads(self.cfg_path.read_text())["max_build_rounds"]
+        self.assertEqual(attempts.read_text().splitlines(), ["attempt"] * limit)
+
+    def test_builder_repairs_rejected_commit_message(self):
+        hook = self.base / "hooks" / "commit-msg"
+        hook.parent.mkdir()
+        hook.write_text('#!/bin/sh\ngit interpret-trailers --parse "$1" | grep -qx "Ticket: EX-123" || '
+                        '{ echo "ticket trailer required" >&2; exit 1; }\n')
+        hook.chmod(0o755)
+        self.git(self.wt(), "config", "core.hooksPath", str(hook.parent))
+        builder = (self.bin / "codex").read_text()
+        self.shim("codex", builder.replace('file.write_text("typo")', 'file.write_text("hello!")')
+                  .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "ticket trailer required" in prompt:
+    import subprocess
+    assert subprocess.check_output(["git", "show", ":greeting.txt"]) == b"hello!"
+    result["summary"] = "Implement the greeting\\n\\nTicket: EX-123"
+if os.environ.get("BAD_RESULT"):'''))
+        self.start_run()
+        self.assertEqual(self.journal()["round"], 2)
+        self.assertEqual(self.journal()["phase"], "local")
+        self.assertIn("Ticket: EX-123", self.git(self.wt(), "log", "-1", "--format=%B"))
 
     def test_commit_created_before_command_reports_failure(self):
         self.env["REAL_GIT"] = shutil.which("git")
