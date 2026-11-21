@@ -37,7 +37,7 @@ if builder:
         file.write_text("hello")
     else:
         file.write_text("typo")
-    result = dict(outcome="built", summary="Updated the greeting.")
+    result = dict(outcome="built", summary="Updated the greeting.", intended_files=[])
 else:
     assert "check_results" in prompt and "diff --git" in prompt
     result = (dict(outcome="approve", summary="Greeting verified.") if file.read_text()=="hello!"
@@ -232,6 +232,44 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(self.git(self.wt(), "ls-files", "coverage.tmp"), "")
         self.assertEqual((self.wt() / "coverage.tmp").read_text(), "generated")
         self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "1")
+
+    def snapshot_claim(self, profile, builder_name, reviewer_name):
+        self.scripted()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["repo_checks"]["a"] = [[sys.executable, "-c",
+            "from pathlib import Path; p=Path('__snapshots__/greeting.snap'); "
+            "p.parent.mkdir(exist_ok=True); p.write_text('hello!')"]]
+        self.cfg_path.write_text(json.dumps(cfg))
+        shim = self.base / "bin"
+        builder = shim / builder_name
+        builder.write_text(builder.read_text().replace('file.write_text("typo")', 'file.write_text("hello!")')
+                           .replace('if os.environ.get("BAD_RESULT"):', '''if builder and "checks left changes" in prompt:
+    assert Path("__snapshots__/greeting.snap").read_text() == "hello!"
+    result["intended_files"] = ["__snapshots__/greeting.snap"]
+if os.environ.get("BAD_RESULT"):'''))
+        reviewer = shim / reviewer_name
+        reviewer.write_text(reviewer.read_text().replace('assert "check_results" in prompt',
+            'assert \'"intended_files": ["__snapshots__/greeting.snap"]\' in prompt\n'
+            '    assert "diff --git a/__snapshots__/greeting.snap" in prompt\n'
+            '    assert "check_results" in prompt'))
+        self.assert_success(profile)
+        self.assertEqual(self.git(self.wt(), "show", "HEAD:__snapshots__/greeting.snap"), "hello!")
+        self.assertEqual(len(self.calls.read_text().splitlines()), 3)
+
+    def test_codex_claims_snapshot_for_claude_review(self):
+        self.snapshot_claim("mixed", "codex", "claude")
+
+    def test_claude_claims_snapshot(self):
+        self.snapshot_claim("claude", "claude", "claude")
+
+    def test_invalid_intended_file_is_rejected(self):
+        self.scripted()
+        builder = self.base / "bin/codex"
+        builder.write_text(builder.read_text().replace('intended_files=[]', 'intended_files=["../outside.snap"]'))
+        self.assertIn("repository-relative", self.factory("run", "--slice", "first", ok=False))
+        self.reload()
+        self.assertEqual(self.data["slices"][0]["status"], "blocked")
+        self.assertEqual(self.git(self.wt(), "rev-list", "--count", "origin/main..HEAD"), "0")
 
     @unittest.skipUnless(os.environ.get("FACTORY_LIVE_PROFILE"), "opt-in authenticated CLI smoke")
     def test_live(self):

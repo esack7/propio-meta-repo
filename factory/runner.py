@@ -21,10 +21,14 @@ from planning import context_files, helper, plan, print_plan
 BUILD = """Implement only this slice in the current worktree. You own source edits.
 The runner commits, runs the listed checks, and invokes the reviewer. Leave git,
 delivery state, and external services to the runner. Address any previous feedback.
-Report built with a summary, or blocked with the outstanding question."""
+Report built with a summary, or blocked with the outstanding question.
+List exact repository-relative files intentionally kept as source changes in
+intended_files, including snapshots or generated source that belongs in the commit.
+Use an empty list when there are no such files."""
 REVIEW = """Independently review the complete candidate diff against the supplied criteria,
 design, and repository instructions. Inspect the worktree read-only as needed.
 Assess whether the checks actually exercise each criterion and whether tests were weakened.
+Assess whether files claimed in intended_files belong in the source change.
 Report approve with a rationale, changes with specific actionable findings tied to
 criteria or concrete defects, or blocked with the question that requires a decision."""
 
@@ -173,7 +177,8 @@ def repair_check_changes(j, wt, branch, head, feedback):
     j.save(j.state["phase"], check_artifacts=sorted(artifacts))
     dirty = (f"checks left changes in the worktree:\n{changes}\n"
              "Inspect these files and fix the cause so checks leave the candidate clean. "
-             "Remove generated files or ignore them before committing the repair.")
+             "Remove or ignore disposable output. If generated source or snapshots belong in the commit, "
+             "list their exact paths in intended_files for independent review.")
     retry_round(j, "\n".join(filter(None, (feedback, dirty))), repair="checks")
     return True
 
@@ -211,12 +216,15 @@ def candidate_step(d, j, wt, branch):
             raise FactoryError(result["summary"])
         if st.get("check_artifacts"):
             candidates = set(git(wt, "ls-files", "--cached", "--others", "--exclude-standard", "-z").split("\0"))
-            remaining = candidates.intersection(st["check_artifacts"])
+            remaining = candidates.intersection(st["check_artifacts"]) - set(result["intended_files"])
             if remaining:
-                retry_round(j, "Generated check files still eligible for staging. Remove or ignore them:\n" +
+                retry_round(j, "Generated check files still eligible for staging. Remove, ignore, or explicitly "
+                            "claim intentional source in intended_files:\n" +
                             "\n".join(sorted(remaining)), repair="checks")
                 return
             j.save(j.state["phase"], check_artifacts=[])
+        intended = sorted(set(st.get("intended_files", [])) | set(result["intended_files"]))
+        j.save(j.state["phase"], intended_files=intended)
         if git(wt, "status", "--porcelain", "--untracked-files=all"):
             git(wt, "add", "-A")
             commit_message = st.get("commit_message")
@@ -294,7 +302,8 @@ def candidate_step(d, j, wt, branch):
     elif phase == "review":
         ensure_head(wt, branch, head, clean=True)
         diff = git(wt, "diff", "--no-ext-diff", "--no-textconv", st["base"], head, "--")
-        review_input = dict(base=st["base"], candidate=head, diff=diff, check_results=st["results"])
+        review_input = dict(base=st["base"], candidate=head, diff=diff, check_results=st["results"],
+                            intended_files=st.get("intended_files", []))
         if st.get("package_reports"):
             review_input["package_reports"] = st["package_reports"]
         print(f"Round {n}: {p['roles']['reviewer']['agent']} reviewing {head}", flush=True)
