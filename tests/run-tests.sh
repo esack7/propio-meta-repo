@@ -84,7 +84,7 @@ for script in "$EXTRACT" "$PARSE" "$SETUP" "$REFRESH" "$PREPARE" "$CLOSE" "$CREA
 done
 
 # Skill metadata checks
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages factory; do
 	skill_file="$ROOT/.claude/skills/$skill/SKILL.md"
 	if [ -f "$skill_file" ] && grep -q '^name: '"$skill" "$skill_file" && grep -q '^description:' "$skill_file"; then
 		pass "skill metadata: $skill"
@@ -103,7 +103,7 @@ done
 
 # Codex compatibility wrappers (real directories are used because Codex discovery
 # does not reliably follow project-local skill symlinks).
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages factory; do
 	wrapper="$ROOT/.agents/skills/$skill"
 	canonical="../../../.claude/skills/$skill/SKILL.md"
 	if [ -d "$wrapper" ] && [ ! -L "$wrapper" ] && [ -f "$wrapper/SKILL.md" ] && \
@@ -116,7 +116,7 @@ for skill in setup-repositories refresh-repositories create-spec prepare-spec cl
 done
 
 # Propio symlinks
-for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages; do
+for skill in setup-repositories refresh-repositories create-spec prepare-spec close-spec link-local-packages spec-status start-slice verify-packages factory; do
 	link="$ROOT/.propio/skills/$skill"
 	if [ -L "$link" ] && [ -f "$link/SKILL.md" ]; then
 		pass "propio symlink: $skill"
@@ -1023,6 +1023,24 @@ if python3 "$ROOT/tests/test-delivery.py"; then
 	pass 'delivery and package integration tests'
 else
 	fail 'delivery and package integration tests'
+fi
+
+if python3 "$ROOT/tests/test-factory.py"; then
+	pass 'software factory preview and agent workflows'
+else
+	fail 'software factory preview and agent workflows'
+fi
+
+if python3 "$ROOT/tests/test-factory-recovery.py"; then
+	pass 'software factory interruption recovery and draft PR handoff'
+else
+	fail 'software factory interruption recovery and draft PR handoff'
+fi
+
+if python3 "$ROOT/tests/test-factory-spec.py"; then
+	pass 'software factory multi-repository delivery and package verification'
+else
+	fail 'software factory multi-repository delivery and package verification'
 fi
 
 printf '\nTests complete: %s passed, %s failed\n' "$PASS" "$FAIL"

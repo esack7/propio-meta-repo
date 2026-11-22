@@ -9,3 +9,4 @@
 /specs/*/.delivery.lock/
 /specs/*/.delivery-*
 __pycache__/
+/specs/*/.factory-runs/

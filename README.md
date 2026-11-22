@@ -17,6 +17,16 @@ The approach is inspired by [The Meta Repo: The AI Map of Your Codebase](https:/
 
 Your source repositories remain independent. The meta-repo tracks the map and the plans; it does not track cloned source code.
 
+## Preview, implement, and verify a spec
+
+Run `bin/factory plan <spec>` for a read-only preview. Use
+`bin/factory run <spec> --slice <slice> --profile mixed` to build, check, and
+independently review one prepared slice locally. Resume with `bin/factory resume <spec>`.
+Add `--draft-pr` to a run or resume when a push and draft PR are authorized. Choose `claude`, `codex`, or
+`mixed` for the agent roles. To advance eligible slices across repositories, use
+`bin/factory run <spec>` after each merge. Use `bin/factory verify <spec> --json`
+for current merge, criterion, and package evidence across the whole spec. [Factory guide](docs/software-factory.md)
+
 ## Prerequisites
 
 - Git 2.17 or newer

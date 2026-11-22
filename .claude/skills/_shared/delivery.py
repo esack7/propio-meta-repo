@@ -2,6 +2,9 @@
 """Tracked delivery state and guarded slice operations. Python standard library only."""
 
 import argparse
+from contextlib import contextmanager, nullcontext
+from copy import deepcopy
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -9,14 +12,37 @@ import re
 import subprocess
 import sys
 import tempfile
+import package_evidence
 
 SHARED = Path(__file__).resolve().parent
 STATES = {"planned", "implementing", "review", "blocked", "merged", "verified"}
 SLUG = r"[a-z0-9][a-z0-9-]*"
+HELD_LOCKS = set()
 
 
-def run(*args, cwd=None):
-    p = subprocess.run([str(a) for a in args], cwd=cwd, text=True, capture_output=True)
+class AwaitingMerge(ValueError):
+    """The remote history does not yet contain the reviewed change."""
+
+
+@contextmanager
+def exclusive(directory):
+    """Keep the lease through outstanding child operations, even if the parent dies."""
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError(f"another operation is active in {directory}") from exc
+        HELD_LOCKS.add(fd)
+        yield
+    finally:
+        HELD_LOCKS.discard(fd)
+        os.close(fd)
+
+
+def run(*args, cwd=None, input_text=None):
+    p = subprocess.run([str(a) for a in args], cwd=cwd, input=input_text, text=True,
+                       capture_output=True, pass_fds=tuple(HELD_LOCKS))
     if p.returncode:
         raise ValueError(
             p.stderr.strip() or p.stdout.strip() or f"command failed: {args[0]}"
@@ -26,6 +52,20 @@ def run(*args, cwd=None):
 
 def git(path, *args):
     return run("git", "-C", path, *args)
+
+
+def is_ancestor(path, commit, ref):
+    p = subprocess.run(["git", "-C", path, "merge-base", "--is-ancestor", commit, ref],
+                       text=True, capture_output=True, pass_fds=tuple(HELD_LOCKS))
+    if p.returncode not in (0, 1):
+        raise ValueError(p.stderr.strip() or "cannot read Git ancestry")
+    return p.returncode == 0
+
+
+def eligible_predecessor(s):
+    # Manually managed delivery records can advance immediately after merge.
+    return s["status"] == "verified" or (s["status"] == "merged" and
+                                         not (s.get("merge_evidence") or s.get("package_checks")))
 
 
 def atomic_json(path, value):
@@ -168,6 +208,13 @@ class Delivery:
                 raise ValueError(f"{sid}: blocked requires a reason and next action")
         if not isinstance(data.get("working_agreement"), str):
             raise ValueError("working_agreement must record the user-authorized scope")
+        by_id = {s["id"]: s for s in data["slices"]}
+        for s in data["slices"]:
+            list(package_evidence.gates(s, by_id))
+            if not isinstance(s.get("package_evidence", []), list):
+                raise ValueError("package_evidence must be a list of package reports")
+            if not isinstance(s.get("merge_evidence", {}), dict):
+                raise ValueError("merge_evidence must be an object")
 
     def paths(self, name):
         ref = self.root / "repos" / name
@@ -189,30 +236,37 @@ class Delivery:
 
     def evidence_errors(self, data):
         errors = []
+        by_id = {s["id"]: s for s in data["slices"]}
         for s in data["slices"]:
             if s["status"] != "verified":
                 continue
             try:
                 ref, _ = self.paths(s["repo"])
-                head = git(ref, "rev-parse", "refs/heads/" + s["branch"])
-                for e in s["evidence"].values():
-                    if e["commit"] != head:
-                        raise ValueError(
-                            "evidence is stale for the current branch head"
-                        )
-                    git(ref, "cat-file", "-e", e["commit"] + "^{commit}")
-                    git(
-                        ref,
-                        "merge-base",
-                        "--is-ancestor",
-                        e["commit"],
-                        "refs/heads/" + s["branch"],
-                    )
+                head = git(ref, "rev-parse", "--verify", "refs/heads/" + s["branch"] + "^{commit}")
+                if s.get("merge_evidence") and s["merge_evidence"].get("head") != head:
+                    raise ValueError("merge evidence is stale for the current branch head")
+                self.check_acceptance(s, data["criteria"], head)
+                package_evidence.require_reports(s, by_id)
             except ValueError as exc:
                 errors.append(
                     f"{s['id']}: evidence is missing or no longer on its branch: {exc}"
                 )
         return errors
+
+    def check_acceptance(self, s, criteria, head):
+        if set(s.get("evidence", {})) != set(s["criteria"]):
+            raise ValueError("missing reviewed evidence for one or more assigned criteria")
+        for c, e in s["evidence"].items():
+            if e["commit"] != head:
+                raise ValueError("evidence is stale for the current branch head")
+            if "criterion" in e and (e["criterion"] != criteria[c] or
+                                     e.get("commands") != s.get("factory_checks", {}).get(c)):
+                raise ValueError(f"{c}: criterion or commands changed after review")
+        _, wt = self.paths(s["repo"])
+        if wt.exists():
+            self.registered_worktree(s["repo"])
+            if git(wt, "symbolic-ref", "--short", "HEAD") == s["branch"] and git(wt, "status", "--porcelain", "--untracked-files=all"):
+                raise ValueError("reviewed worktree has uncommitted edits")
 
     def completion_errors(self, data):
         errors = self.evidence_errors(data)
@@ -246,13 +300,15 @@ class Delivery:
                 "pr",
                 "view",
                 str(s["pr"]),
+                "--repo",
+                self.repos[s["repo"]]["url"],
                 "--json",
-                "state,headRefName,headRefOid,baseRefName,mergeCommit,url",
+                "state,isCrossRepository,headRefName,headRefOid,baseRefName,mergeCommit,url",
                 cwd=ref,
             )
         )
         if (
-            p["headRefName"] != s["branch"]
+            p["isCrossRepository"] or p["headRefName"] != s["branch"]
             or p["baseRefName"] != self.repos[s["repo"]]["default"]
         ):
             raise ValueError(f"{s['id']}: PR branch/base mismatch")
@@ -261,17 +317,46 @@ class Delivery:
             raise ValueError(f"{s['id']}: PR head differs from retained local branch")
         return p
 
-    def merged(self, s):
+    def merged(self, s, *, require_pr=False):
         ref, _ = self.paths(s["repo"])
         base = "refs/remotes/origin/" + self.repos[s["repo"]]["default"]
-        head = git(ref, "rev-parse", "refs/heads/" + s["branch"])
+        head = git(ref, "rev-parse", "--verify", "refs/heads/" + s["branch"] + "^{commit}")
+        proof = {"head": head, "base": self.repos[s["repo"]]["default"]}
+        if not (s.get("pr") and require_pr):
+            if is_ancestor(ref, head, base):
+                return dict(proof, commit=head, method="ancestry")
+            if not s.get("pr"):
+                raise AwaitingMerge(f"{s['id']}: head is not on the default branch; no PR recorded")
+        p = self.pr_state(s)
+        if p["state"] == "OPEN":
+            raise AwaitingMerge(f"{s['id']}: PR #{s['pr']} is open")
+        if p["state"] != "MERGED" or not p.get("mergeCommit"):
+            raise ValueError(f"{s['id']}: PR is not merged")
+        commit = p["mergeCommit"]["oid"]
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise ValueError(f"{s['id']}: invalid PR merge commit")
         try:
-            git(ref, "merge-base", "--is-ancestor", head, base)
-        except ValueError:
-            p = self.pr_state(s)
-            if p["state"] != "MERGED" or not p.get("mergeCommit"):
-                raise ValueError(f"{s['id']}: PR is not merged")
-            git(ref, "merge-base", "--is-ancestor", p["mergeCommit"]["oid"], base)
+            git(ref, "merge-base", "--is-ancestor", commit, base)
+        except ValueError as exc:
+            raise ValueError(f"{s['id']}: PR merge commit is absent from the fetched default branch") from exc
+        return dict(proof, commit=commit, method="pull_request", pr=s["pr"])
+
+    def confirm_merge(self, s, *, require_pr=False):
+        recorded = s.get("merge_evidence")
+        actual = self.merged(s, require_pr=bool(recorded) or require_pr)
+        if recorded and actual != recorded:
+            raise ValueError(f"{s['id']}: recorded merge proof changed; reconcile the spec")
+        return actual
+
+
+def registered_plan(planned, sid, branch):
+    data = deepcopy(planned)
+    s = next((s for s in data["slices"] if s["id"] == sid), None)
+    if not s or s["status"] != "planned" or s.get("branch"):
+        raise ValueError("slice registration requires a planned slice")
+    order = max((x.get("start_order") or 0 for x in data["slices"]), default=0) + 1
+    s.update(branch=branch, status="implementing", start_order=order)
+    return data
 
 
 def parser():
@@ -289,6 +374,16 @@ def parser():
     status.add_argument("--json", action="store_true")
     start = sub.add_parser("start")
     start.add_argument("slice")
+    start.add_argument("--factory-attempt", help="store a recoverable factory start receipt")
+    start.add_argument("--expect-record-stdin", action="store_true",
+                       help="start only if the delivery record still matches the supplied plan")
+    start.add_argument("--json", action="store_true", help="return the starting commit and registered plan")
+    handoff = sub.add_parser("local-handoff", help="record a factory result from stdin")
+    handoff.add_argument("slice")
+    attach = sub.add_parser("record-draft", help="attach a checked draft PR to a reviewed slice")
+    attach.add_argument("slice")
+    recover = sub.add_parser("recover-interrupt", help="reopen an interrupted legacy factory slice")
+    recover.add_argument("slice")
     close = sub.add_parser("check-close")
     close.add_argument("--offline", action="store_true")
     close.add_argument("--worktrees-only", action="store_true")
@@ -321,6 +416,50 @@ def execute(args):
         print(f"initialized {d.path}; plan criteria and slices before implementation")
         return
     data = d.load()
+    if args.command in {"local-handoff", "record-draft", "recover-interrupt"}:
+        result = json.load(sys.stdin)
+        if data != result["expected"]:
+            raise ValueError("delivery record changed during this run; reconcile the handoff")
+        s = next((s for s in data["slices"] if s["id"] == args.slice), None)
+        expected_status = {"record-draft": "review", "recover-interrupt": "blocked",
+                           "local-handoff": "implementing"}[args.command]
+        if not s or s["status"] != expected_status:
+            raise ValueError(f"handoff requires a slice in {expected_status}")
+        _, wt = d.registered_worktree(s["repo"])
+        head = git(wt, "rev-parse", "HEAD")
+        if git(wt, "symbolic-ref", "--short", "HEAD") != s["branch"] or head != result["head"]:
+            raise ValueError("slice branch or commit changed before handoff")
+        if args.command == "recover-interrupt":
+            if not s["note"].startswith("interrupted\n") or s.get("evidence"):
+                raise ValueError("only an interrupted pre-journal factory run can be reopened")
+            s["status"] = "implementing"
+            d.validate(data)
+            atomic_json(d.path, data)
+            return
+        if args.command == "record-draft":
+            if (type(result["pr"]) is not int or result["pr"] <= 0 or s.get("pr") not in (None, result["pr"])
+                    or git(wt, "status", "--porcelain", "--untracked-files=all")
+                    or set(s["evidence"]) != set(s["criteria"])
+                    or any(e["commit"] != head for e in s["evidence"].values())):
+                raise ValueError("draft handoff requires current reviewed evidence and a clean branch")
+            s.update(pr=result["pr"], note=result["note"])
+            d.validate(data)
+            atomic_json(d.path, data)
+            return
+        status, evidence = result["status"], result["evidence"]
+        if status == "review":
+            if git(wt, "status", "--porcelain", "--untracked-files=all") or set(evidence) != set(s["criteria"]):
+                raise ValueError("review requires a clean worktree and evidence for every criterion")
+            if any(record["commit"] != head for record in evidence.values()):
+                raise ValueError("evidence must match the reviewed head")
+        elif status != "blocked" or evidence:
+            raise ValueError("local handoff must request review or record a blocker")
+        s.update(status=status, note=result["note"], evidence=evidence)
+        if "package_evidence" in result:
+            s["package_evidence"] = result["package_evidence"]
+        d.validate(data)
+        atomic_json(d.path, data)
+        return
     if args.command == "active-branch":
         if args.repo not in d.repos:
             raise ValueError("repository not selected")
@@ -371,13 +510,47 @@ def execute(args):
                         )
                         break
                     try:
-                        d.merged(s)
+                        d.confirm_merge(s)
                     except ValueError as exc:
                         errors.append(f"{s['id']}: {exc}")
         if errors:
             raise ValueError("\n".join(errors))
         return
     if args.command == "start":
+        expected = json.load(sys.stdin) if args.expect_record_stdin else data
+        branch = f"codex/{d.spec}-{args.slice}"
+        receipt = None
+        if args.factory_attempt:
+            if (not re.fullmatch(r"run-[a-zA-Z0-9_-]+", args.factory_attempt)
+                    or not re.fullmatch(SLUG, args.slice) or not args.expect_record_stdin):
+                raise ValueError("invalid factory start request")
+            receipt = d.directory / ".factory-runs" / args.slice / args.factory_attempt / "start.json"
+            if receipt.resolve() != receipt or not receipt.parent.is_dir():
+                raise ValueError("invalid start receipt path")
+            if receipt.exists():
+                transaction = json.loads(receipt.read_text())
+                if transaction["expected"] != expected:
+                    raise ValueError("factory start receipt belongs to another plan")
+                started = transaction["started"]
+                if (started["delivery"] != registered_plan(expected, args.slice, branch)
+                        or not re.fullmatch(r"[0-9a-f]{40}", started["base"])):
+                    raise ValueError("invalid factory registration receipt")
+                if data == started["delivery"]:
+                    print(json.dumps(started))
+                    return
+                # The helper may have died between checkout and delivery registration.
+                saved = next(s for s in started["delivery"]["slices"] if s["id"] == args.slice)
+                _, wt = d.registered_worktree(saved["repo"])
+                if data == expected and git(wt, "symbolic-ref", "--short", "HEAD") == saved["branch"]:
+                    if (git(wt, "rev-parse", "HEAD") != started["base"]
+                            or git(wt, "status", "--porcelain", "--untracked-files=all")):
+                        raise ValueError("interrupted checkout changed; inspect the worktree")
+                    d.validate(started["delivery"])
+                    atomic_json(d.path, started["delivery"])
+                    print(json.dumps(started))
+                    return
+        if expected != data:
+            raise ValueError("delivery record changed since planning; preview the updated plan")
         s = next((s for s in data["slices"] if s["id"] == args.slice), None)
         if not s or s["status"] != "planned" or s.get("branch"):
             raise ValueError(
@@ -405,20 +578,32 @@ def execute(args):
             raise ValueError("current worktree branch is not registered")
         git(ref, "fetch", "origin", "--prune")
         base = "refs/remotes/origin/" + d.repos[s["repo"]]["default"]
+        required = set(s["depends_on"])
         if previous:
-            if previous["status"] not in {"merged", "verified"}:
-                raise ValueError("current slice has not merged")
-            d.merged(previous)
+            required.add(previous["id"])
         else:
             git(ref, "merge-base", "--is-ancestor", git(wt, "rev-parse", "HEAD"), base)
-        # Validate cross-repository dependencies against freshly fetched refs too.
+        # Factory verification covers the complete dependency chain.
+        for dep in reversed(data["slices"]):
+            if dep["id"] in required and (dep.get("merge_evidence") or dep.get("package_checks")):
+                required.update(dep["depends_on"])
+        by_id = {row["id"]: row for row in data["slices"]}
+        fetched = {ref}
         for dep in data["slices"]:
-            if dep["id"] in s["depends_on"]:
-                dep_ref, _ = d.paths(dep["repo"])
-                if dep_ref != ref:
-                    git(dep_ref, "fetch", "origin", "--prune")
-                d.merged(dep)
-        branch = f"codex/{d.spec}-{s['id']}"
+            if dep["id"] not in required:
+                continue
+            if dep["status"] not in {"merged", "verified"}:
+                raise ValueError(f"{dep['id']}: preceding slice has not merged")
+            dep_ref, _ = d.paths(dep["repo"])
+            if dep_ref not in fetched:
+                git(dep_ref, "fetch", "origin", "--prune")
+                fetched.add(dep_ref)
+            proof = d.confirm_merge(dep, require_pr=bool(args.factory_attempt))
+            if dep.get("merge_evidence") or dep.get("package_checks"):
+                if dep["status"] != "verified":
+                    raise ValueError(f"{dep['id']}: verify the predecessor before starting this slice")
+                d.check_acceptance(dep, data["criteria"], proof["head"])
+                package_evidence.require_reports(dep, by_id)
         refs = git(
             ref,
             "for-each-ref",
@@ -429,20 +614,22 @@ def execute(args):
         if refs:
             raise ValueError(f"branch collision: {branch}")
         baseline = git(ref, "rev-parse", base)
+        data = registered_plan(data, s["id"], branch)
+        d.validate(data)
+        if receipt is not None:
+            atomic_json(receipt, {"expected": expected, "started": {"base": baseline, "delivery": data}})
         git(wt, "checkout", "--no-track", "-b", branch, baseline)
         try:
-            next_order = (
-                max((x.get("start_order") or 0 for x in data["slices"]), default=0) + 1
-            )
-            s.update(branch=branch, status="implementing", start_order=next_order)
-            d.validate(data)
             atomic_json(d.path, data)
         except Exception:
             # Roll back only the branch created here, before any implementation edits.
             git(wt, "checkout", old)
             git(ref, "branch", "-D", branch)
             raise
-        print(f"started {s['id']} in {wt} on {branch} at {baseline}")
+        if args.json:
+            print(json.dumps({"base": baseline, "delivery": data}))
+        else:
+            print(f"started {s['id']} in {wt} on {branch} at {baseline}")
         return
     errors = d.completion_errors(data)
     report = {
@@ -466,7 +653,7 @@ def execute(args):
             if wt.exists():
                 d.registered_worktree(name)
                 row["branch"] = git(wt, "symbolic-ref", "--short", "HEAD")
-                row["dirty"] = bool(git(wt, "status", "--porcelain"))
+                row["dirty"] = bool(git(wt, "status", "--porcelain", "--untracked-files=all"))
                 known = row["branch"] == f"feature/{d.spec}" or any(
                     s.get("branch") == row["branch"] and s["repo"] == name
                     for s in data["slices"]
@@ -515,22 +702,18 @@ def execute(args):
 def main():
     args = parser().parse_args()
     # Serializes helper mutations; direct edits should be made while helpers are idle.
-    lock = None
     try:
-        if args.command in {"init", "start"}:
-            if not re.fullmatch(SLUG, args.spec):
-                raise ValueError("invalid spec name")
+        lock = nullcontext()
+        if args.command in {"init", "start", "local-handoff", "record-draft", "recover-interrupt"}:
             directory = Delivery(args.project_map, args.spec).directory
-            candidate = directory / ".delivery.lock"
-            candidate.mkdir()
-            lock = candidate
-        execute(args)
+            if (directory / ".delivery.lock").exists():
+                raise ValueError("legacy delivery lock present; inspect the existing operation")
+            lock = exclusive(directory)
+        with lock:
+            execute(args)
     except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
         print(f"delivery: {exc}", file=sys.stderr)
         return 1
-    finally:
-        if lock is not None:
-            lock.rmdir()
     return 0
 
 
