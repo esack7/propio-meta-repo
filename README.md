@@ -22,7 +22,7 @@ Your source repositories remain independent. The meta-repo tracks the map and th
 Run `bin/factory plan <spec>` for a read-only preview. Use
 `bin/factory run <spec> --slice <slice> --profile mixed` to build, check, and
 independently review one prepared slice locally. Resume with `bin/factory resume <spec>`.
-Add `--draft-pr` to a run or resume when a push and draft PR are authorized. Choose `claude`, `codex`, or
+Use `--ready-pr` for a CI-checked PR ready for review, or `--draft-pr` for a draft. Choose `claude`, `codex`, or
 `mixed` for the agent roles. To advance eligible slices across repositories, use
 `bin/factory run <spec>` after each merge. Use `bin/factory verify <spec> --json`
 for current merge, criterion, and package evidence across the whole spec. [Factory guide](docs/software-factory.md)

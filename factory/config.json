@@ -9,6 +9,10 @@
   },
   "max_build_rounds": 3,
   "timeout_seconds": 1200,
+  "ready_checks": {
+    "propio-agent": ["CI / required"],
+    "propio-providers": ["CI / required"]
+  },
   "repo_checks": {
     "propio-agent": [["npm", "test"], ["npm", "run", "build"], ["npm", "run", "format:check"], ["npx", "fallow", "audit"]],
     "propio-providers": [["npm", "test"], ["npm", "run", "build"], ["npm", "run", "format:check"], ["npx", "fallow", "audit"]]

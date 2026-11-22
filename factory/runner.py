@@ -12,7 +12,7 @@ import tempfile
 
 from agents import AgentUnavailable, BuilderFeedback, FactoryError, invoke, process, tail
 from delivery import Delivery, eligible_predecessor, exclusive, git, run
-from drafts import lookup, publish, verify_draft
+from drafts import lookup, promote, publish, verify_pr
 from journal import Journal, run_root
 from package_evidence import require_reports
 from spec_delivery import package_reports, package_sources, reconcile, show_verification
@@ -89,7 +89,7 @@ def adopt_legacy(d, sid, adopt_edits, profile):
                 any(e["commit"] != head for e in s["evidence"].values())):
             raise FactoryError("the existing review evidence does not cover this commit")
         p = dict(spec=d.spec, slice=sid, repository=repo)
-        return Journal.create(d, data, {}, p, False, phase="local", head=head)
+        return Journal.create(d, data, {}, p, "local", phase="local", head=head)
     prior = list((run_root(d) / sid).glob("run-*"))
     if len(prior) != 1 or prior[0].resolve() != prior[0]:
         raise FactoryError("cannot identify the prior factory attempt; inspect the worktree")
@@ -111,12 +111,12 @@ def adopt_legacy(d, sid, adopt_edits, profile):
     if n > p["max_build_rounds"]:
         raise FactoryError("legacy attempt already exceeds the configured round budget")
     phase = "editing" if dirty or head == base else "checks"
-    return Journal.create(d, data, packet, p, False,
+    return Journal.create(d, data, packet, p, "local",
                           phase="recover-legacy" if s["status"] == "blocked" else phase,
                           resume_phase=phase, base=base, head=head, round=n)
 
 
-def refresh_snapshot(d, j, draft):
+def refresh_snapshot(d, j, mode):
     """Allow unrelated slices to progress while a run is stopped."""
     st = j.state
     if st["phase"] == "start":
@@ -136,13 +136,13 @@ def refresh_snapshot(d, j, draft):
         if old and new.get("merge_evidence") != old:
             raise FactoryError(f"{dep}: dependency merge changed since the run; reconcile the handoff")
     if actual["working_agreement"] != prior["working_agreement"]:
-        if (st["phase"] not in {"local", "publish", "drafted"} or draft is None
+        if (st["phase"] not in {"local", "publish", "drafted", "ci", "ready"} or mode is None
                 or not actual["working_agreement"].strip()):
             raise FactoryError("working agreement changed; reconcile authority before continuing")
     # Keep the original CAS target. A pending handoff may already be installed;
     # record() will accept either its exact before or exact after state.
     expected = dict(actual, slices=[s if row["id"] == sid else row for row in actual["slices"]])
-    if live != s and st["phase"] not in {"handoff", "block", "attach", "recover-legacy"}:
+    if live != s and st["phase"] not in {"handoff", "block", "attach", "attach-ready", "recover-legacy"}:
         raise FactoryError("delivery record changed during this run; reconcile the handoff")
     if expected != prior:
         j.save(st["phase"], expected=expected)
@@ -357,42 +357,63 @@ def finish_review(d, j, wt):
     s = slice_in(st["expected"], sid)
     head = st["head"]
 
+    mode = st["pr_mode"]
+    repo = d.repos[s["repo"]]
+    phase = st["phase"]
+
     def validate():
         if d.load() != st["expected"]:
-            raise FactoryError("delivery record changed before draft PR handoff")
+            raise FactoryError("delivery record changed before PR handoff")
         if not st["expected"]["working_agreement"].strip():
             raise FactoryError("record the authorized scope in the working agreement")
         ensure_head(wt, s["branch"], head, clean=True)
         if s["status"] != "review":
-            raise FactoryError("draft PR requires current evidence for every criterion")
+            raise FactoryError("PR handoff requires current evidence for every criterion")
         d.check_acceptance(s, st["expected"]["criteria"], head)
 
-    ensure_head(wt, s["branch"], head, clean=True)
-    phase = st["phase"]
-    if phase == "attach" or (phase == "drafted" and st["draft"]):
-        # A previous process already observed the remote side effect. Only read
-        # GitHub here, even if someone subsequently changed the remote branch.
-        recorded = dict(s, pr=st["fields"]["pr"]) if phase == "attach" else s
-        repo = d.repos[s["repo"]]
-        pr = lookup(repo["url"], recorded)
-        verify_draft(pr, recorded, repo["default"], head)
-        if phase == "attach":
-            expected = record(d, j, "record-draft", st["fields"])
-            j.save("drafted", expected=expected)
-        print("Draft PR:", pr["url"])
-    elif st["draft"]:
-        validate()
+    def package_checks():
         if s.get("package_checks"):
             require_reports(s, package_sources(d, s, st["expected"], refresh=True), head)
+
+    ensure_head(wt, s["branch"], head, clean=True)
+    if phase in {"attach", "attach-ready"}:
+        # A crash can leave either side of the tracked delivery write installed.
+        fields = st["fields"]
+        recorded = dict(s, pr=fields["pr"])
+        pr = lookup(repo["url"], recorded)
+        verify_pr(pr, recorded, repo["default"], head, draft=st.get("observed_draft", True))
+        expected = record(d, j, "record-pr", fields)
+        j.save("ready" if phase == "attach-ready" else "drafted", expected=expected)
+        return False
+
+    if mode == "local":
+        if phase == "publish":
+            j.save("local")
+    elif phase in {"local", "publish"}:
+        validate()
+        package_checks()
         j.save("publish")
-        pr = publish(d, s, wt, head, st["expected"]["criteria"], validate)
-        fields = dict(pr=pr["number"], note=f"{s['note']}\nDraft PR: {pr['url']}")
-        j.save("attach", fields=fields)
-        expected = record(d, j, "record-draft", fields)
-        j.save("drafted", expected=expected)
-        print("Draft PR:", pr["url"])
-    elif phase == "publish":
-        j.save("local")
+        pr = publish(d, s, wt, head, st["expected"]["criteria"], validate, ready=mode == "ready")
+        label = "Draft PR" if pr["isDraft"] else "PR"
+        fields = dict(pr=pr["number"], note=f"{s['note']}\n{label}: {pr['url']}")
+        j.save("attach", fields=fields, observed_draft=pr["isDraft"])
+        return False
+    elif mode == "ready" and phase in {"drafted", "ci"}:
+        validate()
+        package_checks()
+        j.save("ci")
+        pr = promote(repo["url"], s, repo["default"], head, st["ready_checks"], st["ci_timeout"], validate)
+        note = s["note"].removesuffix(f"\nDraft PR: {pr['url']}").removesuffix(f"\nPR: {pr['url']}")
+        fields = dict(pr=pr["number"], note=f"{note}\nReady for your review: {pr['url']}")
+        j.save("attach-ready", fields=fields, observed_draft=False)
+        return False
+    else:
+        ready = phase == "ready"
+        pr = lookup(repo["url"], s)
+        verify_pr(pr, s, repo["default"], head, draft=not ready)
+        print("Ready for your review:" if ready else "Draft PR:", pr["url"])
+        if phase == "ci":
+            j.save("drafted")
     expected = j.state["expected"]
     s = slice_in(expected, sid)
     print(f"Review handoff: {sid} at {head}\n{s['note']}")
@@ -400,6 +421,7 @@ def finish_review(d, j, wt):
         print(f"{c}: {item['check']}")
     remaining = [x["id"] for x in expected["slices"] if x["id"] != sid and x["status"] != "verified"]
     print("Other outstanding slices:", ", ".join(remaining) or "none")
+    return True
 
 
 def continue_slice(d, j):
@@ -427,13 +449,14 @@ def continue_slice(d, j):
             expected = record(d, j, "local-handoff", st["fields"])
             j.save("local" if phase == "handoff" else "blocked", expected=expected)
             continue
-        if phase != "attach" and d.load() != st["expected"]:
+        if phase not in {"attach", "attach-ready"} and d.load() != st["expected"]:
             raise FactoryError("delivery record changed during this run; reconcile the handoff")
         if phase == "blocked":
             raise FactoryError(s["note"])
-        if phase in {"local", "publish", "attach", "drafted"}:
-            finish_review(d, j, wt)
-            return
+        if phase in {"local", "publish", "attach", "drafted", "ci", "attach-ready", "ready"}:
+            if finish_review(d, j, wt):
+                return
+            continue
         try:
             candidate_step(d, j, wt, s["branch"])
         except FactoryError as exc:
@@ -461,7 +484,8 @@ def status(d, sid, remote, as_json):
                 s[key] = records[s["id"]][key]
         j = Journal.for_slice(d, s["id"])
         if j:
-            s["factory"] = {k: j.state.get(k) for k in ("phase", "round", "head", "draft")}
+            s["factory"] = {k: j.state.get(k) for k in ("phase", "round", "head", "pr_mode")}
+            s["factory"]["draft"] = j.state["pr_mode"] != "local"
         if remote and s.get("branch"):
             try:
                 pr = lookup(d.repos[s["repo"]]["url"], s)
@@ -493,15 +517,30 @@ def status(d, sid, remote, as_json):
             print("Acceptance:", gap)
 
 
-def start_planned(d, data, packet, preview, draft):
+def handoff_options(d, preview, mode):
+    if mode == "draft":
+        preview["handoff"] = "Push the reviewed commit and open or reuse its draft PR."
+    if mode != "ready":
+        return {}
+    cfg = json.loads((d.root / "factory/config.json").read_text())
+    repo = preview["repository"]
+    by_repo = cfg.get("ready_checks", {})
+    gates = by_repo.get(repo) if isinstance(by_repo, dict) else None
+    if not isinstance(gates, list) or not gates or not all(isinstance(g, str) and g.strip() for g in gates):
+        raise FactoryError(f"configure the CI checks for {repo} under ready_checks in factory/config.json")
+    preview["handoff"] = f"Push the reviewed commit, wait for {', '.join(gates)}, and mark the PR ready for review."
+    return dict(ready_checks=gates, ci_timeout=cfg["timeout_seconds"])
+
+
+def start_planned(d, data, packet, preview, mode, options):
     for role in preview["roles"].values():
         if not shutil.which(role["agent"]):
             raise FactoryError(f"install {role['agent']} or select another profile")
-    journal = Journal.create(d, data, packet, preview, bool(draft))
+    journal = Journal.create(d, data, packet, preview, mode or "local", **options)
     continue_slice(d, journal)
 
 
-def run_spec(d, profile, draft):
+def run_spec(d, profile, mode):
     while True:
         report = reconcile(d)
         ready = set(report["eligible_predecessors"])
@@ -521,11 +560,10 @@ def run_spec(d, profile, draft):
             if preview["blockers"]:
                 report["issues"][s["id"]] = "; ".join(preview["blockers"])
                 continue
-            if draft:
-                preview["handoff"] = "Push the reviewed commit and open or reuse its draft PR."
+            options = handoff_options(d, preview, mode)
             print_plan(preview)
             try:
-                start_planned(d, planned, packet, preview, draft)
+                start_planned(d, planned, packet, preview, mode, options)
             except FactoryError:
                 if slice_in(d.load(), s["id"])["status"] != "blocked":
                     raise
@@ -548,9 +586,11 @@ def main():
             cmd.add_argument("--profile", default="mixed")
         if name in {"plan", "run", "resume"}:
             mode = cmd.add_mutually_exclusive_group()
-            mode.add_argument("--draft-pr", action="store_true", dest="draft", default=None,
+            mode.add_argument("--draft-pr", action="store_const", const="draft", dest="mode",
                               help="authorize pushing the reviewed branch and opening or reusing its draft PR")
-            mode.add_argument("--local-only", action="store_false", dest="draft",
+            mode.add_argument("--ready-pr", action="store_const", const="ready", dest="mode",
+                              help="push the reviewed branch and mark its PR ready after CI passes")
+            mode.add_argument("--local-only", action="store_const", const="local", dest="mode",
                               help="use a local handoff, including on resumed runs")
         if name in {"plan", "status", "verify"}:
             cmd.add_argument("--json", action="store_true")
@@ -572,7 +612,7 @@ def main():
             root.mkdir(exist_ok=True)
             with exclusive(root):
                 if args.command == "run":
-                    return run_spec(d, args.profile, args.draft)
+                    return run_spec(d, args.profile, args.mode)
                 report = reconcile(d)
                 if args.json:
                     print(json.dumps(report, indent=2))
@@ -581,8 +621,7 @@ def main():
                 return 0 if report["verified"] else 1
         if args.command in {"plan", "run"}:
             data, packet, preview = plan(d, args.slice, args.profile)
-            if args.draft:
-                preview["handoff"] = "Push the reviewed commit and open or reuse its draft PR."
+            options = handoff_options(d, preview, args.mode)
             if args.command == "plan" and args.json:
                 print(json.dumps(preview, indent=2))
             else:
@@ -600,14 +639,15 @@ def main():
                     journal = adopt_legacy(d, args.slice, args.adopt_edits, args.profile)
                 elif args.profile and args.profile != journal.state["plan"].get("profile"):
                     raise FactoryError("a journalled run uses its saved profile")
-                if args.draft is False:
-                    journal.save(journal.state["phase"], draft=False)
-                refresh_snapshot(d, journal, args.draft)
-                if args.draft:
-                    journal.save(journal.state["phase"], draft=True)
+                if args.mode == "local":
+                    journal.save(journal.state["phase"], pr_mode="local")
+                refresh_snapshot(d, journal, args.mode)
+                if args.mode in {"draft", "ready"}:
+                    options = handoff_options(d, dict(journal.state["plan"]), args.mode)
+                    journal.save(journal.state["phase"], pr_mode=args.mode, **options)
                 continue_slice(d, journal)
             else:
-                start_planned(d, data, packet, preview, args.draft)
+                start_planned(d, data, packet, preview, args.mode, options)
         return 0
     except KeyboardInterrupt:
         print("Factory interrupted. Use factory resume to continue from the saved stage.", file=sys.stderr)
