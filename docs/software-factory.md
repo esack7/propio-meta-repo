@@ -7,7 +7,7 @@ bin/factory plan <spec> --slice <slice> --profile mixed
 bin/factory run <spec> --slice <slice> --profile mixed
 ```
 
-The preview also accepts `--json`. Omit `--slice` on a preview to inspect the first eligible planned slice, or the earliest outstanding plan if none is eligible. It reads local state and lists any prerequisites, including unmerged dependencies. The existing `start-slice` helper fetches and checks the current base and actual merges when the run starts. The default handoff is local review. Add `--draft-pr` to the preview to see the remote handoff, or to the run to authorize it.
+The preview also accepts `--json`. Omit `--slice` on a preview to inspect the first eligible planned slice, or the earliest outstanding plan if none is eligible. It reads local state and lists any prerequisites, including unmerged dependencies. The existing `start-slice` helper fetches and checks the current base and actual merges when the run starts. The default handoff is local review. Use the same handoff option on the preview and run: `--draft-pr` for a draft or `--ready-pr` for a PR ready for review after CI.
 
 ## Prepare the inputs
 
@@ -52,6 +52,20 @@ One factory invocation at a time can work on a spec. If a worker survives an int
 
 For earlier factory runs, resume can use a completed local review with current evidence. For an interrupted implementation it needs an identifiable prior attempt and the branch creation record. Inspect any pre-existing edits before using `--adopt-edits` to include them. Use `--profile` to select the profile for a pre-journal implementation.
 
+## Hand a PR back ready for review
+
+Use the working agreement to select the handoff. When the user asks for a PR ready for review, run:
+
+```sh
+bin/factory run <spec> --slice <slice> --ready-pr
+```
+
+For an existing reviewed slice or draft, use `bin/factory resume <spec> --slice <slice> --ready-pr`. The runner reuses the reviewed commit and PR number. It waits for the repository's configured checks on that commit, marks the PR ready, and confirms its repository, base, head, and ready state on GitHub. The slice stays in `review` until merge and verification. An interrupted promotion resumes with the saved mode, including when GitHub already marked the PR ready.
+
+Set `ready_checks` in `factory/config.json` to the CI gates that must pass for each repository using ready handoff. Use `Workflow / job` for a GitHub Actions check or the exact name for a standalone check or commit status. Both Propio repositories use `CI / required`. The factory waits up to `timeout_seconds` for pending or unreported checks. If multiple reports match a gate, a successful report on the reviewed commit satisfies it. A failed or skipped gate identifies the check that needs attention. After repairing or rerunning CI for the reviewed commit, use `resume` to finish the handoff.
+
+New PR titles default to `feat(<spec>): implement <slice words>`. Set the slice's optional `pr_title` in the delivery plan for a more specific squash title, such as `fix(cli): preserve the capture setting`. Existing PR titles are preserved.
+
 ## Authorize a draft PR
 
 ```sh
@@ -73,7 +87,7 @@ bin/factory run <spec> --profile mixed
 bin/factory verify <spec> --json
 ```
 
-Run the first command after preparing worktrees and again after each external merge. It fetches the configured default branches, verifies predecessor slices, and builds eligible slices in delivery order. Independent repositories can reach review in the same invocation. A repository with outstanding work waits for that slice. If an implementation was interrupted, use `resume --slice` for that slice. Add `--draft-pr` only when push and draft creation are authorized for every slice the invocation can start.
+Run the first command after preparing worktrees and again after each external merge. It fetches the configured default branches, verifies predecessor slices, and builds eligible slices in delivery order. Independent repositories can reach review in the same invocation. A repository with outstanding work waits for that slice. If an implementation was interrupted, use `resume --slice` for that slice. Use `--draft-pr` or `--ready-pr` when that handoff is authorized for every slice the invocation can start. Ready mode checks CI configuration for all eligible repositories before starting a slice. A CI failure or timeout leaves the affected slice resumable and allows independent slices to continue.
 
 Use `verify` to update `delivery.json` and check acceptance without starting agents. A recorded PR must be merged into the mapped base from the registered branch at the reviewed head. The merge commit must be reachable from the freshly fetched base. This also verifies squash merges. A slice with no recorded PR can use direct ancestry. For an externally squash-merged PR, enter its number on the slice so the factory can locate the merge.
 

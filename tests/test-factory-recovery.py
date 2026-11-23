@@ -14,30 +14,68 @@ import unittest
 FactoryFixture = runpy.run_path(str(Path(__file__).with_name("test-factory.py")))["FactoryFixture"]
 
 GH = '''#!/usr/bin/env python3
-import json, os, signal, sys
+import json, os, signal, subprocess, sys
 from pathlib import Path
 args = sys.argv[1:]
+origin = Path(args[args.index("--repo") + 1])
+assert origin.parent == Path(os.environ["FIXTURE_ORIGIN"]).parent
+assert origin.name in {"a.git", "b.git"}
 state = Path(os.environ["FAKE_PR"])
+if origin.name == "b.git":
+    state = state.with_name("pr-b.json")
 log = state.with_suffix(".calls")
 with log.open("a") as f:
     print(json.dumps(args), file=f)
-target = "https://github.example/owner/a"
-assert args[args.index("--repo") + 1] == os.environ["FIXTURE_ORIGIN"]
+target = "https://github.example/owner/" + origin.stem
+
+def remote_head(branch):
+    return subprocess.check_output(["git", "--git-dir", origin, "rev-parse", "refs/heads/" + branch],
+                                   text=True).strip()
+
 if args[:2] == ["pr", "list"]:
     print("[" + state.read_text() + "]" if state.exists() else "[]")
 elif args[:2] == ["pr", "view"]:
     assert state.exists() and args[2] == "17"
-    print(state.read_text())
+    pr = json.loads(state.read_text())
+    pr["headRefOid"] = remote_head(pr["headRefName"])
+    lag = state.with_suffix(".lag")
+    if lag.exists():
+        lag.unlink()
+        pr["isDraft"] = True
+    if "statusCheckRollup" in args[args.index("--json") + 1]:
+        outcome = os.environ.get("CI_RESULT", "SUCCESS") if origin.name == "a.git" else "SUCCESS"
+        pr["statusCheckRollup"] = [dict(__typename="CheckRun", name="required", workflowName="CI",
+            status="COMPLETED", conclusion=outcome)] if outcome != "missing" else []
+        if os.environ.get("DUPLICATE_CHECK"):
+            pr["statusCheckRollup"].insert(0, dict(pr["statusCheckRollup"][0], conclusion="FAILURE"))
+            pr["statusCheckRollup"].append(dict(__typename="CheckRun", name="external", workflowName=None,
+                status="COMPLETED", conclusion="SUCCESS"))
+        if os.environ.get("DRIFT") == "second":
+            marker = state.with_suffix(".observed")
+            if marker.exists():
+                pr["headRefOid"] = "0" * 40
+            marker.touch()
+    print(json.dumps(pr))
+elif args[:2] == ["pr", "ready"]:
+    pr = json.loads(state.read_text())
+    assert args[2] == "17" and pr["isDraft"]
+    pr["isDraft"] = False
+    state.write_text(json.dumps(pr))
+    if os.environ.get("DELAY_READY_READ"):
+        state.with_suffix(".lag").touch()
+    if os.environ.get("KILL_AFTER_READY"):
+        os.kill(os.getppid(), signal.SIGKILL)
+
 elif args[:2] == ["pr", "create"]:
     assert not state.exists() or json.loads(state.read_text())["state"] == "CLOSED"
     assert "--draft" in args
+    branch = args[args.index("--head")+1]
+    title = "feat(example): implement " + branch.rsplit("-", 1)[1]
+    assert args[args.index("--title")+1] == os.environ.get("EXPECT_TITLE", title)
     body = Path(args[args.index("--body-file")+1]).read_text()
     assert "Reviewed commit:" in body and "Create greeting.txt" in body
-    branch = args[args.index("--head")+1]
     base = args[args.index("--base")+1]
-    import subprocess
-    head = subprocess.check_output(["git","--git-dir",os.environ["FIXTURE_ORIGIN"],
-                                    "rev-parse","refs/heads/"+branch], text=True).strip()
+    head = remote_head(branch)
     state.write_text(json.dumps(dict(number=17, url=target+"/pull/17", state="OPEN",
         isDraft=True, isCrossRepository=False, headRefOid=head, headRefName=branch, baseRefName=base)))
     if os.environ.get("KILL_AFTER_CREATE"):
@@ -71,6 +109,9 @@ class RecoveryTests(FactoryFixture):
         self.pr = self.base / "pr.json"
         self.env.update(FAKE_PR=str(self.pr), FIXTURE_ORIGIN=str(self.base / "a.git"))
         self.shim("gh", GH)
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["ready_checks"]["a"] = ["CI / required"]
+        self.cfg_path.write_text(json.dumps(cfg))
 
     def shim(self, name, content):
         path = self.bin / name
@@ -295,6 +336,108 @@ if os.environ.get("BAD_RESULT"):'''))
         requests = [json.loads(line)[:2] for line in self.pr.with_suffix(".calls").read_text().splitlines()]
         self.assertEqual(requests.count(["pr", "create"]), 1)
         self.assertEqual(self.calls.read_bytes(), calls)
+
+    def test_promote_existing_legacy_draft_after_ci_and_lost_response(self):
+        self.start_run("--draft-pr")
+        calls = self.calls.read_bytes()
+        journal, = self.directory.glob(".factory-runs/first/run-*/journal.json")
+        old = self.journal()
+        old.pop("pr_mode")
+        journal.write_text(json.dumps(dict(old, draft=True)))
+        self.factory("resume")
+        self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+        self.env["CI_RESULT"] = "FAILURE"
+        self.assertIn("CI / required reported FAILURE", self.factory("resume", "--ready-pr", ok=False))
+        self.assertEqual(self.journal()["phase"], "ci")
+        self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+        self.env.update(CI_RESULT="SUCCESS", KILL_AFTER_READY="1")
+        self.factory("resume", ok=False)
+        self.assertFalse(json.loads(self.pr.read_text())["isDraft"])
+        self.assertIn("Ready for your review", self.factory("resume"))
+        self.factory("resume")
+        self.reload()
+        row = self.data["slices"][0]
+        self.assertEqual((row["status"], row["pr"], self.journal()["phase"]), ("review", 17, "ready"))
+        self.assertNotIn("Draft PR:", row["note"])
+        self.assertEqual(self.calls.read_bytes(), calls)
+        commands = [json.loads(line)[:2] for line in self.pr.with_suffix(".calls").read_text().splitlines()]
+        self.assertEqual(commands.count(["pr", "create"]), 1)
+        self.assertEqual(commands.count(["pr", "ready"]), 1)
+
+    def test_ready_run_waits_for_missing_gate_and_refuses_changed_head(self):
+        self.env.update(CI_RESULT="missing", EXPECT_TITLE="fix(cli): correct the greeting")
+        self.data["slices"][0]["pr_title"] = self.env["EXPECT_TITLE"]
+        self.save()
+        self.start_run("--draft-pr")
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["timeout_seconds"] = 1
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.assertIn("still waiting for CI / required", self.factory("resume", "--ready-pr", ok=False))
+        self.env.update(CI_RESULT="SUCCESS", DRIFT="second")
+        self.assertIn("reviewed commit", self.factory("resume", ok=False))
+        self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+        self.factory("resume", "--local-only")
+        self.assertEqual(self.journal()["phase"], "local")
+        self.factory("resume")
+        self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+
+    def test_ready_run_creates_and_promotes(self):
+        self.env.update(DUPLICATE_CHECK="1", DELAY_READY_READ="1")
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["ready_checks"]["a"].append("external")
+        self.cfg_path.write_text(json.dumps(cfg))
+        preview = self.factory("plan", "--ready-pr")
+        self.assertIn("wait for CI / required, external", preview)
+        self.assertIn("Ready for your review", self.factory("run", "--ready-pr"))
+        pr = json.loads(self.pr.read_text())
+        self.assertFalse(pr["isDraft"])
+        self.assertEqual(pr["headRefOid"], self.journal()["head"])
+
+    def test_ready_mode_fast_forwards_existing_ready_pr(self):
+        self.start_run()
+        branch = self.git(self.wt(), "branch", "--show-current")
+        base = self.journal()["base"]
+        self.git(self.wt(), "push", "origin", f"{base}:refs/heads/{branch}")
+        self.pr.write_text(json.dumps(dict(number=17, state="OPEN", isDraft=False, isCrossRepository=False,
+                                           url="https://github.example/owner/a/pull/17", headRefName=branch,
+                                           headRefOid=base, baseRefName="main")))
+        self.assertIn("Ready for your review", self.factory("resume", "--ready-pr"))
+        self.assertEqual(self.git(self.wt(), "ls-remote", "origin", f"refs/heads/{branch}").split()[0],
+                         self.journal()["head"])
+        calls = self.pr.with_suffix(".calls").read_text()
+        self.assertNotIn('"create"', calls)
+        self.assertNotIn('"ready"', calls)
+        report = json.loads(self.factory("status", "--json"))
+        self.assertEqual(report["slices"][0]["factory"]["pr_mode"], "ready")
+        self.assertFalse(report["slices"][0]["factory"]["draft"])
+
+    def test_draft_resume_reconciles_promotion_without_repeating_it(self):
+        self.env["KILL_AFTER_READY"] = "1"
+        self.start_run("--ready-pr", ok=False)
+        self.assertEqual(self.journal()["phase"], "ci")
+        self.assertIn("PR already marked ready", self.factory("resume", "--draft-pr"))
+        self.assertEqual(self.journal()["phase"], "drafted")
+        self.assertFalse(json.loads(self.pr.read_text())["isDraft"])
+        self.assertIn("Ready for your review", self.factory("resume", "--ready-pr"))
+
+    def test_spec_preflights_gates_and_continues_after_independent_ci_failure(self):
+        self.data["slices"].append(self.slice("second", "b", []))
+        self.data["slices"][1]["factory_checks"] = self.data["slices"][0]["factory_checks"]
+        self.save()
+        cfg = json.loads(self.cfg_path.read_text())
+        cfg["repo_checks"]["b"] = []
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.assertIn("configure the CI checks for b", self.factory("run", "--ready-pr", ok=False))
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.pr.exists())
+        cfg["ready_checks"]["b"] = ["CI / required"]
+        self.cfg_path.write_text(json.dumps(cfg))
+        self.env["CI_RESULT"] = "FAILURE"
+        self.assertIn("CI / required reported FAILURE", self.factory("run", "--ready-pr", ok=False))
+        self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+        self.assertFalse(json.loads(self.pr.with_name("pr-b.json").read_text())["isDraft"])
+        self.reload()
+        self.assertEqual([s["status"] for s in self.data["slices"]], ["review", "review"])
 
     def test_interrupt_after_push_then_change_handoff(self):
         self.crash_git("push")

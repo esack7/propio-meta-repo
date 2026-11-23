@@ -160,6 +160,10 @@ class Delivery:
                 raise ValueError(
                     "PR must be a positive number in the selected repository"
                 )
+            if "pr_title" in s:
+                title = s["pr_title"]
+                if not isinstance(title, str) or not title.strip() or title.splitlines() != [title] or "\0" in title:
+                    raise ValueError(f"{sid}: pr_title must be a nonempty single line")
             start_order = s.get("start_order")
             if start_order is not None:
                 if (
@@ -380,7 +384,7 @@ def parser():
     start.add_argument("--json", action="store_true", help="return the starting commit and registered plan")
     handoff = sub.add_parser("local-handoff", help="record a factory result from stdin")
     handoff.add_argument("slice")
-    attach = sub.add_parser("record-draft", help="attach a checked draft PR to a reviewed slice")
+    attach = sub.add_parser("record-pr", aliases=["record-draft"], help="attach a checked PR to a reviewed slice")
     attach.add_argument("slice")
     recover = sub.add_parser("recover-interrupt", help="reopen an interrupted legacy factory slice")
     recover.add_argument("slice")
@@ -416,12 +420,12 @@ def execute(args):
         print(f"initialized {d.path}; plan criteria and slices before implementation")
         return
     data = d.load()
-    if args.command in {"local-handoff", "record-draft", "recover-interrupt"}:
+    if args.command in {"local-handoff", "record-pr", "record-draft", "recover-interrupt"}:
         result = json.load(sys.stdin)
         if data != result["expected"]:
             raise ValueError("delivery record changed during this run; reconcile the handoff")
         s = next((s for s in data["slices"] if s["id"] == args.slice), None)
-        expected_status = {"record-draft": "review", "recover-interrupt": "blocked",
+        expected_status = {"record-pr": "review", "record-draft": "review", "recover-interrupt": "blocked",
                            "local-handoff": "implementing"}[args.command]
         if not s or s["status"] != expected_status:
             raise ValueError(f"handoff requires a slice in {expected_status}")
@@ -436,12 +440,12 @@ def execute(args):
             d.validate(data)
             atomic_json(d.path, data)
             return
-        if args.command == "record-draft":
+        if args.command in {"record-pr", "record-draft"}:
             if (type(result["pr"]) is not int or result["pr"] <= 0 or s.get("pr") not in (None, result["pr"])
                     or git(wt, "status", "--porcelain", "--untracked-files=all")
                     or set(s["evidence"]) != set(s["criteria"])
                     or any(e["commit"] != head for e in s["evidence"].values())):
-                raise ValueError("draft handoff requires current reviewed evidence and a clean branch")
+                raise ValueError("PR handoff requires current reviewed evidence and a clean branch")
             s.update(pr=result["pr"], note=result["note"])
             d.validate(data)
             atomic_json(d.path, data)
@@ -704,7 +708,7 @@ def main():
     # Serializes helper mutations; direct edits should be made while helpers are idle.
     try:
         lock = nullcontext()
-        if args.command in {"init", "start", "local-handoff", "record-draft", "recover-interrupt"}:
+        if args.command in {"init", "start", "local-handoff", "record-pr", "record-draft", "recover-interrupt"}:
             directory = Delivery(args.project_map, args.spec).directory
             if (directory / ".delivery.lock").exists():
                 raise ValueError("legacy delivery lock present; inspect the existing operation")

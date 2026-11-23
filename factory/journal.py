@@ -28,7 +28,7 @@ class Journal:
         self.state = state
 
     @classmethod
-    def create(cls, d, data, packet, preview, draft, phase="start", **checkpoint):
+    def create(cls, d, data, packet, preview, mode, phase="start", **checkpoint):
         runs = run_root(d) / preview["slice"]
         if runs.resolve() != runs:
             raise FactoryError("unsafe factory slice directory")
@@ -38,7 +38,7 @@ class Journal:
         attempt = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
         j = cls(attempt / "journal.json", {})
         state = dict(expected=data, packet=packet, plan=preview, repositories=d.repos,
-                     draft=draft, round=1, feedback="", version=1)
+                     pr_mode=mode, round=1, feedback="", version=1)
         j.save(phase, **dict(state, **checkpoint))
         return j
 
@@ -54,6 +54,10 @@ class Journal:
         if (j.state["version"] != 1 or j.state["plan"]["slice"] != sid
                 or j.state["plan"]["spec"] != d.spec):
             raise FactoryError("factory journal does not match the selected slice")
+        # Version 1 journals stored only the draft publication permission.
+        j.state.setdefault("pr_mode", "draft" if j.state.get("draft") else "local")
+        if j.state["pr_mode"] not in {"local", "draft", "ready"}:
+            raise FactoryError("unknown PR handoff mode in the saved factory run")
         return j
 
     @classmethod
@@ -72,7 +76,7 @@ class Journal:
                     s["status"] == "blocked" and s["note"].startswith("interrupted\n")):
                 legacy.append(s["id"])
         if len(found) + len(legacy) > 1 and not sid:
-            active = [j for j in found if j.state["phase"] not in {"local", "drafted", "blocked"}]
+            active = [j for j in found if j.state["phase"] not in {"local", "drafted", "ready", "blocked"}]
             if len(active) == 1 and not legacy:
                 return active[0]
             raise FactoryError("multiple recoverable slices; select one with --slice")
