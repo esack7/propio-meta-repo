@@ -12,7 +12,7 @@ import tempfile
 
 from agents import AgentUnavailable, BuilderFeedback, FactoryError, invoke, process, tail
 from delivery import Delivery, eligible_predecessor, exclusive, git, run
-from drafts import lookup, promote, publish, verify_pr
+from drafts import ChecksIncomplete, lookup, promote, publish, verify_pr
 from journal import Journal, run_root
 from package_evidence import require_reports
 from spec_delivery import package_reports, package_sources, reconcile, show_verification
@@ -351,6 +351,13 @@ def candidate_step(d, j, wt, branch):
         raise FactoryError(f"unknown factory stage {phase}")
 
 
+def remote_pr_note(note, pr, label):
+    url = pr["url"]
+    for prior in ("Draft PR", "PR", "Ready for your review", "PR already marked ready"):
+        note = note.removesuffix(f"\n{prior}: {url}")
+    return f"{note}\n{label}: {url}"
+
+
 def finish_review(d, j, wt):
     st = j.state
     sid = st["plan"]["slice"]
@@ -381,13 +388,13 @@ def finish_review(d, j, wt):
         fields = st["fields"]
         recorded = dict(s, pr=fields["pr"])
         pr = lookup(repo["url"], recorded)
-        verify_pr(pr, recorded, repo["default"], head, draft=st.get("observed_draft", True))
+        verify_pr(pr, recorded, repo["default"], head, draft=False if phase == "attach-ready" else None)
         expected = record(d, j, "record-pr", fields)
         j.save("ready" if phase == "attach-ready" else "drafted", expected=expected)
         return False
 
     if mode == "local":
-        if phase == "publish":
+        if phase in {"publish", "ci"}:
             j.save("local")
     elif phase in {"local", "publish"}:
         validate()
@@ -395,25 +402,31 @@ def finish_review(d, j, wt):
         j.save("publish")
         pr = publish(d, s, wt, head, st["expected"]["criteria"], validate, ready=mode == "ready")
         label = "Draft PR" if pr["isDraft"] else "PR"
-        fields = dict(pr=pr["number"], note=f"{s['note']}\n{label}: {pr['url']}")
-        j.save("attach", fields=fields, observed_draft=pr["isDraft"])
+        fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, label))
+        j.save("attach", fields=fields)
         return False
     elif mode == "ready" and phase in {"drafted", "ci"}:
         validate()
         package_checks()
         j.save("ci")
         pr = promote(repo["url"], s, repo["default"], head, st["ready_checks"], st["ci_timeout"], validate)
-        note = s["note"].removesuffix(f"\nDraft PR: {pr['url']}").removesuffix(f"\nPR: {pr['url']}")
-        fields = dict(pr=pr["number"], note=f"{note}\nReady for your review: {pr['url']}")
-        j.save("attach-ready", fields=fields, observed_draft=False)
+        fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, "Ready for your review"))
+        j.save("attach-ready", fields=fields)
         return False
     else:
-        ready = phase == "ready"
         pr = lookup(repo["url"], s)
-        verify_pr(pr, s, repo["default"], head, draft=not ready)
-        print("Ready for your review:" if ready else "Draft PR:", pr["url"])
-        if phase == "ci":
-            j.save("drafted")
+        verify_pr(pr, s, repo["default"], head, draft=False if mode == "ready" else None)
+        if mode == "draft":
+            # Reflect the observed state if GitHub changed before the saved handoff.
+            label = "Draft PR" if pr["isDraft"] else (
+                "Ready for your review" if phase == "ready" else "PR already marked ready")
+            note = remote_pr_note(s["note"], pr, label)
+            if note != s["note"]:
+                fields = dict(pr=pr["number"], note=note)
+                j.save("attach", fields=fields)
+                return False
+            if phase == "ci":
+                j.save("drafted")
     expected = j.state["expected"]
     s = slice_in(expected, sid)
     print(f"Review handoff: {sid} at {head}\n{s['note']}")
@@ -485,7 +498,7 @@ def status(d, sid, remote, as_json):
         j = Journal.for_slice(d, s["id"])
         if j:
             s["factory"] = {k: j.state.get(k) for k in ("phase", "round", "head", "pr_mode")}
-            s["factory"]["draft"] = j.state["pr_mode"] != "local"
+            s["factory"]["draft"] = j.state["pr_mode"] == "draft"
         if remote and s.get("branch"):
             try:
                 pr = lookup(d.repos[s["repo"]]["url"], s)
@@ -541,6 +554,7 @@ def start_planned(d, data, packet, preview, mode, options):
 
 
 def run_spec(d, profile, mode):
+    ci_issues = {}
     while True:
         report = reconcile(d)
         ready = set(report["eligible_predecessors"])
@@ -548,9 +562,12 @@ def run_spec(d, profile, mode):
         if not data["slices"]:
             raise FactoryError("populate delivery.json with criteria and planned slices first")
         busy = {s["repo"] for s in data["slices"] if s.get("branch") and s["id"] not in ready}
-        for s in data["slices"]:
-            if s["status"] != "planned" or s["repo"] in busy or not ready.issuperset(s["depends_on"]):
-                continue
+        eligible = [s for s in data["slices"] if s["status"] == "planned"
+                    and s["repo"] not in busy and ready.issuperset(s["depends_on"])]
+        if mode == "ready":
+            for repo in sorted({s["repo"] for s in eligible}):
+                handoff_options(d, {"repository": repo}, mode)
+        for s in eligible:
             if Journal.for_slice(d, s["id"]):
                 report["issues"][s["id"]] = "interrupted start; use factory resume"
                 continue
@@ -564,11 +581,15 @@ def run_spec(d, profile, mode):
             print_plan(preview)
             try:
                 start_planned(d, planned, packet, preview, mode, options)
+            except ChecksIncomplete as exc:
+                ci_issues[s["id"]] = str(exc)
+                print(f"{s['id']}: {exc}", flush=True)
             except FactoryError:
                 if slice_in(d.load(), s["id"])["status"] != "blocked":
                     raise
             break
         else:
+            report["issues"].update(ci_issues)
             show_verification(report)
             pending = len(report["verified_slices"]) < report["total_slices"]
             return 1 if report["issues"] or (not pending and not report["verified"]) else 0

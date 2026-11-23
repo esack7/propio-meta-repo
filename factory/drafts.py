@@ -55,7 +55,7 @@ def publish(d, s, wt, head, criteria, validate, *, ready=False):
     pr = lookup(target, s, for_publish=True)
 
     if pr:
-        verify_pr(pr, s, base, head if not pr["isDraft"] else None, draft=None if ready else True)
+        verify_pr(pr, s, base, draft=None if ready else True)
     validate()
     if git(wt, "remote", "get-url", "--push", "--all", "origin").splitlines() != [target]:
         raise FactoryError("origin push destination differs from the selected repository")
@@ -100,25 +100,35 @@ def publish(d, s, wt, head, criteria, validate, *, ready=False):
     return pr
 
 
+class ChecksIncomplete(FactoryError):
+    """A CI gate needs attention before this PR can be handed back ready."""
+
+
 def pending_checks(pr, gates):
-    """Require positive success for each configured workflow/job on this PR head."""
-    passed = set()
-    pending = set()
+    """Evaluate matching reports on the reviewed head together."""
+    states = {gate: set() for gate in gates}
     for check in pr["statusCheckRollup"]:
         if check.get("__typename") == "StatusContext":
             name, state = check["context"], check["state"]
         else:
-            name = f"{check.get('workflowName')} / {check.get('name')}"
+            workflow = check.get("workflowName")
+            name = f"{workflow} / {check['name']}" if workflow else check["name"]
             state = check["conclusion"] if check["status"] == "COMPLETED" else "PENDING"
-        if name not in gates:
+        if name in states:
+            states[name].add(state)
+    pending = []
+    failures = []
+    for gate, reports in states.items():
+        if "SUCCESS" in reports:
             continue
-        if state == "SUCCESS":
-            passed.add(name)
-        elif state in {"PENDING", "EXPECTED"}:
-            pending.add(name)
+        if not reports or reports.intersection({"PENDING", "EXPECTED"}):
+            pending.append(gate)
         else:
-            raise FactoryError(f"{pr['url']}: {name} reported {state}. Repair or rerun CI, then resume.")
-    return sorted((set(gates) - passed) | pending)
+            failures.append(f"{gate} reported {', '.join(sorted(reports))}")
+    if failures:
+        details = "; ".join(failures)
+        raise ChecksIncomplete(f"{pr['url']}: {details}. Repair or rerun CI, then resume.")
+    return pending
 
 
 def promote(target, s, base, head, gates, timeout, validate):
@@ -128,16 +138,27 @@ def promote(target, s, base, head, gates, timeout, validate):
         verify_pr(pr, s, base, head, draft=None)
         pending = pending_checks(pr, gates)
         if not pending:
-            break
+            validate()
+            # Refresh the remote head and CI after local validation, immediately before promotion.
+            pr = lookup(target, s, checks=True)
+            verify_pr(pr, s, base, head, draft=None)
+            pending = pending_checks(pr, gates)
+            if not pending:
+                break
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise FactoryError(f"{pr['url']}: still waiting for {', '.join(pending)}. Resume to check again.")
+            raise ChecksIncomplete(f"{pr['url']}: still waiting for {', '.join(pending)}. Resume to check again.")
         print(f"Waiting for {', '.join(pending)} on {pr['url']}", flush=True)
         time.sleep(min(10, remaining))
 
-    validate()
-    if pr["isDraft"]:
-        run("gh", "pr", "ready", pr["number"], "--repo", target)
-    confirmed = lookup(target, s)
-    verify_pr(confirmed, s, base, head, draft=False)
-    return confirmed
+    if not pr["isDraft"]:
+        return pr
+    run("gh", "pr", "ready", pr["number"], "--repo", target)
+    for attempt in range(3):
+        if attempt:
+            time.sleep(1)
+        confirmed = lookup(target, s)
+        verify_pr(confirmed, s, base, head, draft=None)
+        if not confirmed["isDraft"]:
+            return confirmed
+    raise FactoryError(f"{pr['url']}: GitHub still reports a draft after promotion. Resume to confirm.")
