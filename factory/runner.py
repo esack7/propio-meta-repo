@@ -457,6 +457,8 @@ def finish_review(d, j, wt):
                     st.get("review_comment_authors", []),
                     lambda authors: j.save("ready", review_comment_authors=authors),
                 )
+            except FactoryError:
+                raise
             except (ValueError, OSError) as exc:
                 raise FactoryError(f"{pr['url']}: PR is ready. Reviewer comment pending. Resume to retry. {exc}") from exc
             j.save("ready", review_comment_url=comment_url)

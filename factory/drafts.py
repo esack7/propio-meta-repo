@@ -1,6 +1,7 @@
 """Publish exactly the reviewed slice branch and reconcile its GitHub PR."""
 
 import json
+import re
 import tempfile
 import time
 from urllib.parse import urlsplit
@@ -181,12 +182,74 @@ PR_COMMENTS = """query($id: ID!, $endCursor: String) {
 COMMENT_LIMIT = 65_536
 
 
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})([^\r\n]*)")
+BACKTICKS = re.compile(r"`+")
+PARAGRAPH_BREAK = re.compile(r"(\r?\n[ \t]*\r?\n)")
+
+
+def neutralize_prose(text):
+    return text.replace("@", "@\u200b").replace("<!--", "<\u200b!--")
+
+
+def neutralize_inline(text):
+    """Keep matched code spans, including spans fenced by multiple backticks."""
+    runs = list(BACKTICKS.finditer(text))
+    next_run = {}
+    closers = {}
+    for run in reversed(runs):
+        length = len(run[0])
+        next_run[run.start()] = (closers.get(length), closers.get(length - 1))
+        closers[length] = run
+
+    parts = []
+    start = 0
+    for run in runs:
+        opening = run.start()
+        if opening < start:
+            continue
+        escape = opening
+        while escape > start and text[escape - 1] == "\\":
+            escape -= 1
+        # A backslash escapes the first backtick in prose, even in a longer run.
+        escaped = (opening - escape) % 2
+        opening += escaped
+        closing = next_run[run.start()][escaped]
+        if closing:
+            parts.append(neutralize_prose(text[start:opening]))
+            parts.append(text[opening:closing.end()])
+            start = closing.end()
+    parts.append(neutralize_prose(text[start:]))
+    return "".join(parts)
+
+
+def neutralize_markdown(text):
+    """Neutralize prose while preserving inline code and fenced code blocks."""
+    parts = []
+    prose = []
+    fence = None
+    for line in text.splitlines(keepends=True):
+        match = FENCE.match(line)
+        if fence:
+            parts.append(line)
+            if match and match[1].startswith(fence) and not match[2].strip():
+                fence = None
+        elif match and (match[1][0] == "~" or "`" not in match[2]):
+            parts.extend(neutralize_inline(chunk) for chunk in PARAGRAPH_BREAK.split("".join(prose)))
+            prose.clear()
+            fence = match[1]
+            # GitHub uses the opener's info string for formatting, not as code.
+            parts.append(neutralize_prose(line))
+        else:
+            prose.append(line)
+    parts.extend(neutralize_inline(chunk) for chunk in PARAGRAPH_BREAK.split("".join(prose)))
+    return "".join(parts)
+
+
 def review_comment_body(head, reviewer, rationale):
     marker = f"<!-- factory-review:{head} -->"
     contents = (f"**Automated factory review** · {reviewer}\n\n"
                 f"I recommend merging the reviewed commit `{head}`.\n\n{rationale}")
-    # Preserve how mentions and comment openers look without triggering GitHub's parsers.
-    contents = contents.replace("@", "@\u200b").replace("<!--", "<\u200b!--")
+    contents = neutralize_markdown(contents)
     suffix = f"\n\n{marker}"
     encoded = contents.encode()
     if len(encoded) + len(suffix) > COMMENT_LIMIT:

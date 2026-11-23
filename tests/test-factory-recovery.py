@@ -46,6 +46,8 @@ if args[:2] == ["api", "graphql"]:
     assert last_page or not any(arg.startswith("endCursor=") for arg in args)
     page = dict(nodes=comments if last_page else [],
                 pageInfo=dict(hasNextPage=not last_page, endCursor=None if last_page else "next-page"))
+    if os.environ.get("DRIFT") == "comment":
+        state.with_suffix(".head-changed").touch()
     print(json.dumps(dict(data=dict(viewer=dict(login=viewer), node=dict(comments=page)))))
 elif args[:2] == ["pr", "comment"]:
     pr = json.loads(state.read_text())
@@ -67,6 +69,8 @@ elif args[:2] == ["pr", "view"]:
     pr = json.loads(state.read_text())
     pr["id"] = origin.stem
     pr["headRefOid"] = remote_head(pr["headRefName"])
+    if state.with_suffix(".head-changed").exists():
+        pr["headRefOid"] = "0" * 40
     lag = state.with_suffix(".lag")
     if lag.exists():
         lag.unlink()
@@ -395,8 +399,15 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(commands.count(["pr", "ready"]), 1)
 
     def test_ready_comment_recovers_after_post_and_preserves_reviewer_verdict(self):
-        rationale = "Greeting verified with @types/node and `@someone`.\n\n<!-- example\n\nNon-blocking finding."
-        safe_rationale = rationale.replace("@", "@\u200b").replace("<!--", "<\u200b!--")
+        rationale = ("Use @types/node in prose and `npm i @types/node` in code."
+                     "\n\nA longer span ``echo `@name`` keeps the literal tick."
+                     "\nAn escaped opener \\`@person and an unmatched opener `@other."
+                     "\n\n```sh\nnpm i @types/node\n```\n"
+                     "\n   ~~~~sh\nprintf '<!-- @scope/package'\n   ~~~~\n"
+                     "\n<!-- example\n\nNon-blocking finding for @another.")
+        safe_rationale = (rationale.replace("@types/node in prose", "@\u200btypes/node in prose")
+                          .replace("@person", "@\u200bperson").replace("@other", "@\u200bother")
+                          .replace("<!-- example", "<\u200b!-- example").replace("@another", "@\u200banother"))
         self.shim("claude", (self.bin / "claude").read_text().replace('"Greeting verified."', repr(rationale)))
         self.start_run("--draft-pr")
         comments = self.pr.with_suffix(".comments")
@@ -445,6 +456,14 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertNotIn("Ready for your review:", posted["body"])
         self.assertEqual(self.calls.read_bytes(), calls)
         self.assertEqual(self.journal()["review_comment_url"], posted["url"])
+
+    def test_changed_head_during_comment_lookup_reports_mismatch(self):
+        self.env["DRIFT"] = "comment"
+        result = self.start_run("--ready-pr", ok=False)
+        self.assertIn("PR has not been confirmed at the reviewed commit", result)
+        self.assertNotIn("Resume to retry", result)
+        self.assertFalse(self.pr.with_suffix(".comments").exists())
+        self.assertEqual(self.journal()["phase"], "ready")
 
     def test_comment_failure_keeps_ready_handoff_and_retry_truncates_rationale(self):
         rationale = "Greeting verified. " + "😀" * 35_000
