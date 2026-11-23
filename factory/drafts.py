@@ -3,11 +3,12 @@
 import json
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 from agents import FactoryError
 from delivery import git, run
 
-FIELDS = "number,url,state,isDraft,isCrossRepository,headRefName,headRefOid,baseRefName"
+FIELDS = "id,number,url,state,isDraft,isCrossRepository,headRefName,headRefOid,baseRefName"
 
 
 def lookup(target, s, for_publish=False, checks=False):
@@ -162,3 +163,32 @@ def promote(target, s, base, head, gates, timeout, validate):
         if not confirmed["isDraft"]:
             return confirmed
     raise FactoryError(f"{pr['url']}: GitHub still reports a draft after promotion. Resume to confirm.")
+
+
+PR_COMMENTS = """query($id: ID!, $endCursor: String) {
+  node(id: $id) {
+    ... on PullRequest {
+      comments(first: 100, after: $endCursor) {
+        nodes { body viewerDidAuthor url }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}"""
+
+
+def post_review_comment(target, s, base, head, pr, reviewer, rationale, validate):
+    marker = f"<!-- factory-review:{head} -->"
+    body = (f"**Automated factory review** · {reviewer}\n\n"
+            f"I recommend merging the reviewed commit `{head}`.\n\n{rationale}\n\n{marker}")
+    # GitHub can accept a comment before the runner saves its receipt.
+    pages = json.loads(run("gh", "api", "graphql", "--hostname", urlsplit(pr["url"]).hostname,
+                           "--paginate", "--slurp", "-f", f"query={PR_COMMENTS}", "-f", f"id={pr['id']}"))
+    for page in pages:
+        for comment in page["data"]["node"]["comments"]["nodes"]:
+            if comment["viewerDidAuthor"] and comment["body"].rstrip().endswith(marker):
+                return comment["url"]
+    validate()
+    verify_pr(lookup(target, s), s, base, head, draft=False)
+    return run("gh", "pr", "comment", s["pr"], "--repo", target,
+               "--body-file", "-", input_text=body)

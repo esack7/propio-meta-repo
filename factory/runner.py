@@ -12,7 +12,7 @@ import tempfile
 
 from agents import AgentUnavailable, BuilderFeedback, FactoryError, invoke, process, tail
 from delivery import Delivery, eligible_predecessor, exclusive, git, run
-from drafts import ChecksIncomplete, lookup, promote, publish, verify_pr
+from drafts import ChecksIncomplete, lookup, post_review_comment, promote, publish, verify_pr
 from journal import Journal, run_root
 from package_evidence import require_reports
 from spec_delivery import package_reports, package_sources, reconcile, show_verification
@@ -30,7 +30,9 @@ design, and repository instructions. Inspect the worktree read-only as needed.
 Assess whether the checks actually exercise each criterion and whether tests were weakened.
 Assess whether files claimed in intended_files belong in the source change.
 Report approve with a rationale, changes with specific actionable findings tied to
-criteria or concrete defects, or blocked with the question that requires a decision."""
+criteria or concrete defects, or blocked with the question that requires a decision.
+Write an approval summary for the PR reader: explain why the change is ready to
+merge, cite the behavior and checks that support it, and retain non-blocking findings."""
 
 
 def ensure_head(wt, branch, expected, clean=False):
@@ -346,7 +348,8 @@ def candidate_step(d, j, wt, branch):
             fields = dict(status="review", evidence=evidence, note=note)
             if st.get("package_reports"):
                 fields["package_evidence"] = st["package_reports"]
-            j.save("handoff", fields=fields)
+            j.save("handoff", fields=fields, approval=dict(head=head, summary=result["summary"],
+                                                          reviewer=p["roles"]["reviewer"]))
     else:
         raise FactoryError(f"unknown factory stage {phase}")
 
@@ -356,6 +359,34 @@ def remote_pr_note(note, pr, label):
     for prior in ("Draft PR", "PR", "Ready for your review", "PR already marked ready"):
         note = note.removesuffix(f"\n{prior}: {url}")
     return f"{note}\n{label}: {url}"
+
+
+def approved_review(st, s):
+    approval = st.get("approval")
+    if approval:
+        if approval["head"] != st["head"]:
+            raise FactoryError("reviewer approval belongs to another commit; obtain a fresh review")
+        role, summary = approval["reviewer"], approval["summary"]
+    else:
+        # Earlier factory versions stored the actual reviewer verdict in the delivery note.
+        prefix, separator, summary = s["note"].partition(" approved: ")
+        agent = prefix.removeprefix("Local checks passed. ")
+        if not separator or prefix == agent or agent not in {"codex", "claude"}:
+            raise FactoryError("missing factory reviewer verdict for the reviewed commit; obtain a fresh review")
+        role = st["plan"].get("roles", {}).get("reviewer", {"agent": agent})
+        if role["agent"] != agent:
+            raise FactoryError("saved verdict and reviewer profile disagree")
+        if s.get("pr") and summary.splitlines():
+            lines = summary.rstrip().rsplit("\n", 1)
+            if len(lines) == 2 and lines[1].startswith(("Draft PR: ", "PR: ", "Ready for your review: ",
+                                                       "PR already marked ready: ")):
+                summary = lines[0]
+    if not summary.strip():
+        raise FactoryError("missing reviewer rationale for the reviewed commit")
+    reviewer = role["agent"]
+    if role.get("model"):
+        reviewer += f" (`{role['model']}`)"
+    return reviewer, summary.strip()
 
 
 def finish_review(d, j, wt):
@@ -405,13 +436,15 @@ def finish_review(d, j, wt):
         fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, label))
         j.save("attach", fields=fields)
         return False
-    elif mode == "ready" and phase in {"drafted", "ci"}:
+    elif mode == "ready" and (phase in {"drafted", "ci"} or (phase == "ready" and not st.get("review_comment_url"))):
         validate()
         package_checks()
+        reviewer, rationale = approved_review(st, s)
         j.save("ci")
         pr = promote(repo["url"], s, repo["default"], head, st["ready_checks"], st["ci_timeout"], validate)
+        comment_url = post_review_comment(repo["url"], s, repo["default"], head, pr, reviewer, rationale, validate)
         fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, "Ready for your review"))
-        j.save("attach-ready", fields=fields)
+        j.save("attach-ready", fields=fields, review_comment_url=comment_url)
         return False
     else:
         pr = lookup(repo["url"], s)
@@ -430,6 +463,8 @@ def finish_review(d, j, wt):
     expected = j.state["expected"]
     s = slice_in(expected, sid)
     print(f"Review handoff: {sid} at {head}\n{s['note']}")
+    if mode == "ready" and j.state.get("review_comment_url"):
+        print("Reviewer comment:", j.state["review_comment_url"])
     for c, item in s["evidence"].items():
         print(f"{c}: {item['check']}")
     remaining = [x["id"] for x in expected["slices"] if x["id"] != sid and x["status"] != "verified"]
@@ -610,7 +645,7 @@ def main():
             mode.add_argument("--draft-pr", action="store_const", const="draft", dest="mode",
                               help="authorize pushing the reviewed branch and opening or reusing its draft PR")
             mode.add_argument("--ready-pr", action="store_const", const="ready", dest="mode",
-                              help="push the reviewed branch and mark its PR ready after CI passes")
+                              help="mark the reviewed PR ready after CI and post the automated reviewer rationale")
             mode.add_argument("--local-only", action="store_const", const="local", dest="mode",
                               help="use a local handoff, including on resumed runs")
         if name in {"plan", "status", "verify"}:

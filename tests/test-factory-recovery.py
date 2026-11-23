@@ -17,7 +17,13 @@ GH = '''#!/usr/bin/env python3
 import json, os, signal, subprocess, sys
 from pathlib import Path
 args = sys.argv[1:]
-origin = Path(args[args.index("--repo") + 1])
+if args[:2] == ["api", "graphql"]:
+    assert "--paginate" in args and "--slurp" in args
+    assert args[args.index("--hostname") + 1] == "github.example"
+    node_id, = [arg[3:] for arg in args if arg.startswith("id=")]
+    origin = Path(os.environ["FIXTURE_ORIGIN"]).with_name(node_id + ".git")
+else:
+    origin = Path(args[args.index("--repo") + 1])
 assert origin.parent == Path(os.environ["FIXTURE_ORIGIN"]).parent
 assert origin.name in {"a.git", "b.git"}
 state = Path(os.environ["FAKE_PR"])
@@ -32,11 +38,26 @@ def remote_head(branch):
     return subprocess.check_output(["git", "--git-dir", origin, "rev-parse", "refs/heads/" + branch],
                                    text=True).strip()
 
-if args[:2] == ["pr", "list"]:
+comments_file = state.with_suffix(".comments")
+comments = json.loads(comments_file.read_text()) if comments_file.exists() else []
+if args[:2] == ["api", "graphql"]:
+    print(json.dumps([{"data":{"node":{"comments":{"nodes":page}}}} for page in ([], comments)]))
+elif args[:2] == ["pr", "comment"]:
+    pr = json.loads(state.read_text())
+    assert not pr["isDraft"] and args[2] == "17" and args[args.index("--body-file")+1] == "-"
+    body = sys.stdin.read()
+    url = target + "/pull/17#issuecomment-" + str(len(comments)+1)
+    comments.append(dict(body=body, viewerDidAuthor=True, url=url))
+    comments_file.write_text(json.dumps(comments))
+    if os.environ.get("KILL_AFTER_COMMENT"):
+        os.kill(os.getppid(), signal.SIGKILL)
+    print(url)
+elif args[:2] == ["pr", "list"]:
     print("[" + state.read_text() + "]" if state.exists() else "[]")
 elif args[:2] == ["pr", "view"]:
     assert state.exists() and args[2] == "17"
     pr = json.loads(state.read_text())
+    pr["id"] = origin.stem
     pr["headRefOid"] = remote_head(pr["headRefName"])
     lag = state.with_suffix(".lag")
     if lag.exists():
@@ -343,6 +364,7 @@ if os.environ.get("BAD_RESULT"):'''))
         journal, = self.directory.glob(".factory-runs/first/run-*/journal.json")
         old = self.journal()
         old.pop("pr_mode")
+        old.pop("approval")
         journal.write_text(json.dumps(dict(old, draft=True)))
         self.factory("resume")
         self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
@@ -364,6 +386,51 @@ if os.environ.get("BAD_RESULT"):'''))
         self.assertEqual(commands.count(["pr", "create"]), 1)
         self.assertEqual(commands.count(["pr", "ready"]), 1)
 
+    def test_ready_comment_recovers_after_post_and_preserves_reviewer_verdict(self):
+        rationale = "Greeting verified.\n\nNon-blocking: the example could also cover punctuation."
+        self.shim("claude", (self.bin / "claude").read_text().replace('"Greeting verified."', repr(rationale)))
+        self.start_run("--draft-pr")
+        comments = self.pr.with_suffix(".comments")
+        self.assertFalse(comments.exists())
+        calls = self.calls.read_bytes()
+        self.reload()
+        head = self.journal()["head"]
+        marker = f"<!-- factory-review:{head} -->"
+        comments.write_text(json.dumps([dict(body=marker, viewerDidAuthor=False, url="someone-else")]))
+        self.env["KILL_AFTER_COMMENT"] = "1"
+        self.factory("resume", "--ready-pr", ok=False)
+        self.assertEqual(self.journal()["phase"], "ci")
+        posted = json.loads(comments.read_text())
+        self.assertEqual(len(posted), 2)
+        body = posted[1]["body"]
+        self.assertIn("Automated factory review", body)
+        self.assertIn("claude", body)
+        self.assertIn("claude-opus-5-5", body)
+        self.assertIn(rationale, body)
+        self.assertIn(head, body)
+        self.assertTrue(body.endswith(marker))
+        self.assertIn(posted[1]["url"], self.factory("resume"))
+        self.factory("resume")
+        self.assertEqual(json.loads(comments.read_text()), posted)
+        self.assertEqual(self.calls.read_bytes(), calls)
+
+    def test_backfill_older_ready_handoff_from_recorded_approval(self):
+        self.start_run("--ready-pr")
+        journal, = self.directory.glob(".factory-runs/first/run-*/journal.json")
+        state = self.journal()
+        state.pop("approval")
+        state.pop("review_comment_url")
+        journal.write_text(json.dumps(state))
+        comments = self.pr.with_suffix(".comments")
+        comments.unlink()
+        calls = self.calls.read_bytes()
+        self.factory("resume")
+        posted, = json.loads(comments.read_text())
+        self.assertIn("Greeting verified.", posted["body"])
+        self.assertNotIn("Ready for your review:", posted["body"])
+        self.assertEqual(self.calls.read_bytes(), calls)
+        self.assertEqual(self.journal()["review_comment_url"], posted["url"])
+
     def test_ready_run_waits_for_missing_gate_and_refuses_changed_head(self):
         self.env.update(CI_RESULT="missing", EXPECT_TITLE="fix(cli): correct the greeting")
         self.data["slices"][0]["pr_title"] = self.env["EXPECT_TITLE"]
@@ -376,6 +443,7 @@ if os.environ.get("BAD_RESULT"):'''))
         self.env.update(CI_RESULT="SUCCESS", DRIFT="second")
         self.assertIn("reviewed commit", self.factory("resume", ok=False))
         self.assertTrue(json.loads(self.pr.read_text())["isDraft"])
+        self.assertFalse(self.pr.with_suffix(".comments").exists())
         self.factory("resume", "--local-only")
         self.assertEqual(self.journal()["phase"], "local")
         self.factory("resume")
