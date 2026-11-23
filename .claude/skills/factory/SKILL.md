@@ -10,7 +10,7 @@ For authorized implementation, use
 For an interrupted slice, use `bin/factory status <spec>` and
 `bin/factory resume <spec> [--slice <slice>]`. Select the handoff from the user's working agreement. When it calls for a PR
 ready for review, use `--ready-pr` on run or resume. This includes promoting an
-existing factory draft after CI. Choose `--draft-pr` for an explicitly draft
+existing factory draft after CI and posting the automated reviewer’s rationale on the PR. Choose `--draft-pr` for an explicitly draft
 handoff. Resume remembers the selected mode.
 Use `--local-only` if the user narrows the handoff to local work.
 The built-in profiles are `mixed`, `claude`, and `codex`.
