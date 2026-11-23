@@ -31,8 +31,8 @@ Assess whether the checks actually exercise each criterion and whether tests wer
 Assess whether files claimed in intended_files belong in the source change.
 Report approve with a rationale, changes with specific actionable findings tied to
 criteria or concrete defects, or blocked with the question that requires a decision.
-Write an approval summary for the PR reader: explain why the change is ready to
-merge, cite the behavior and checks that support it, and retain non-blocking findings."""
+When the outcome is approve, explain to the PR reader why the change is ready
+to merge, cite the behavior and checks that support it, and retain non-blocking findings."""
 
 
 def ensure_head(wt, branch, expected, clean=False):
@@ -436,19 +436,30 @@ def finish_review(d, j, wt):
         fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, label))
         j.save("attach", fields=fields)
         return False
-    elif mode == "ready" and (phase in {"drafted", "ci"} or (phase == "ready" and not st.get("review_comment_url"))):
+    elif mode == "ready" and phase in {"drafted", "ci"}:
         validate()
         package_checks()
-        reviewer, rationale = approved_review(st, s)
+        approved_review(st, s)
         j.save("ci")
         pr = promote(repo["url"], s, repo["default"], head, st["ready_checks"], st["ci_timeout"], validate)
-        comment_url = post_review_comment(repo["url"], s, repo["default"], head, pr, reviewer, rationale, validate)
         fields = dict(pr=pr["number"], note=remote_pr_note(s["note"], pr, "Ready for your review"))
-        j.save("attach-ready", fields=fields, review_comment_url=comment_url)
+        j.save("attach-ready", fields=fields)
         return False
     else:
         pr = lookup(repo["url"], s)
         verify_pr(pr, s, repo["default"], head, draft=False if mode == "ready" else None)
+        if mode == "ready" and not st.get("review_comment_url"):
+            validate()
+            reviewer, rationale = approved_review(st, s)
+            try:
+                comment_url = post_review_comment(
+                    repo["url"], s, repo["default"], head, pr, reviewer, rationale, validate,
+                    st.get("review_comment_authors", []),
+                    lambda authors: j.save("ready", review_comment_authors=authors),
+                )
+            except (ValueError, OSError) as exc:
+                raise FactoryError(f"{pr['url']}: PR is ready. Reviewer comment pending. Resume to retry. {exc}") from exc
+            j.save("ready", review_comment_url=comment_url)
         if mode == "draft":
             # Reflect the observed state if GitHub changed before the saved handoff.
             label = "Draft PR" if pr["isDraft"] else (

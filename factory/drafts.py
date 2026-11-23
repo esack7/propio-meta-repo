@@ -166,10 +166,11 @@ def promote(target, s, base, head, gates, timeout, validate):
 
 
 PR_COMMENTS = """query($id: ID!, $endCursor: String) {
+  viewer { login }
   node(id: $id) {
     ... on PullRequest {
       comments(first: 100, after: $endCursor) {
-        nodes { body viewerDidAuthor url }
+        nodes { author { login } body url }
         pageInfo { hasNextPage endCursor }
       }
     }
@@ -177,18 +178,48 @@ PR_COMMENTS = """query($id: ID!, $endCursor: String) {
 }"""
 
 
-def post_review_comment(target, s, base, head, pr, reviewer, rationale, validate):
+COMMENT_LIMIT = 65_536
+
+
+def review_comment_body(head, reviewer, rationale):
     marker = f"<!-- factory-review:{head} -->"
-    body = (f"**Automated factory review** · {reviewer}\n\n"
-            f"I recommend merging the reviewed commit `{head}`.\n\n{rationale}\n\n{marker}")
-    # GitHub can accept a comment before the runner saves its receipt.
-    pages = json.loads(run("gh", "api", "graphql", "--hostname", urlsplit(pr["url"]).hostname,
-                           "--paginate", "--slurp", "-f", f"query={PR_COMMENTS}", "-f", f"id={pr['id']}"))
-    for page in pages:
-        for comment in page["data"]["node"]["comments"]["nodes"]:
-            if comment["viewerDidAuthor"] and comment["body"].rstrip().endswith(marker):
+    contents = (f"**Automated factory review** · {reviewer}\n\n"
+                f"I recommend merging the reviewed commit `{head}`.\n\n{rationale}")
+    # Preserve how mentions and comment openers look without triggering GitHub's parsers.
+    contents = contents.replace("@", "@\u200b").replace("<!--", "<\u200b!--")
+    suffix = f"\n\n{marker}"
+    encoded = contents.encode()
+    if len(encoded) + len(suffix) > COMMENT_LIMIT:
+        suffix = ("\n\n*The rationale was shortened to fit GitHub’s comment limit. "
+                  "See the slice’s note in the factory delivery record for the full review.*" + suffix)
+        contents = encoded[:COMMENT_LIMIT - len(suffix.encode())].decode(errors="ignore").rstrip()
+    return contents + suffix
+
+
+def post_review_comment(target, s, base, head, pr, reviewer, rationale, validate, authors, save_authors):
+    body = review_comment_body(head, reviewer, rationale)
+    marker = body.splitlines()[-1]
+    args = ["gh", "api", "graphql", "--hostname", urlsplit(pr["url"]).hostname,
+            "-f", f"query={PR_COMMENTS}", "-f", f"id={pr['id']}"]
+    # GitHub can accept the comment before the runner saves its URL, including
+    # when the next attempt uses a different GitHub account.
+    cursor_args = []
+    while True:
+        data = json.loads(run(*args, *cursor_args))["data"]
+        author = data["viewer"]["login"].lower()
+        known_authors = {*authors, author}
+        comments = data["node"]["comments"]
+        for comment in comments["nodes"]:
+            login = (comment["author"] or {}).get("login", "").lower()
+            if login in known_authors and comment["body"].rstrip().endswith(marker):
                 return comment["url"]
+        page = comments["pageInfo"]
+        if not page["hasNextPage"]:
+            break
+        cursor_args = ["-f", f"endCursor={page['endCursor']}"]
     validate()
+    if author not in authors:
+        save_authors(sorted(known_authors))
     verify_pr(lookup(target, s), s, base, head, draft=False)
     return run("gh", "pr", "comment", s["pr"], "--repo", target,
                "--body-file", "-", input_text=body)
