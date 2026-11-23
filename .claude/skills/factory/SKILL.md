@@ -22,4 +22,6 @@ spec. Report any blocked dependency and the outstanding action.
 
 Use the preview to explain missing prerequisites. Preserve the working
 agreement and report the command's handoff, evidence, and any blocker.
+Before reporting a ready PR, apply the
+[PR description guidance](../../../docs/software-factory.md#write-the-description-for-the-pr-reader).
 See [factory setup and checks](../../../docs/software-factory.md).

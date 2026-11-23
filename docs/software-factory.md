@@ -66,6 +66,16 @@ Set `ready_checks` in `factory/config.json` to the CI gates that must pass for e
 
 New PR titles default to `feat(<spec>): implement <slice words>`. Set the slice's optional `pr_title` in the delivery plan for a more specific squash title, such as `fix(cli): preserve the capture setting`. Existing PR titles are preserved.
 
+### Write the description for the PR reader
+
+The runner creates a description from the slice criteria and check evidence. Before handing back a ready PR, use the spec, the reviewed diff, and the saved results to make the description useful to someone seeing the change for the first time.
+
+- In **Summary**, explain what changed for users and why. Call out any compatibility details that affect adoption.
+- For a user-facing change, use **How to use it** to show the documented workflow with the smallest set of steps or commands needed to try it.
+- In **Verification**, summarize what the checks exercised and link to CI and the automated reviewer’s rationale. Keep full commands and logs in the delivery record and run artifacts.
+
+Edit the description on the existing PR within the authorized handoff. Preserve substantive details already added by maintainers. Confirm the description is attached to the reviewed commit and check the result of any CI run triggered by the edit before reporting the handoff.
+
 ## Authorize a draft PR
 
 ```sh
