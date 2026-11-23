@@ -66,6 +66,20 @@ Set `ready_checks` in `factory/config.json` to the CI gates that must pass for e
 
 New PR titles default to `feat(<spec>): implement <slice words>`. Set the slice's optional `pr_title` in the delivery plan for a more specific squash title, such as `fix(cli): preserve the capture setting`. Existing PR titles are preserved.
 
+### Write the description for the PR reader
+
+The runner creates a description from the slice criteria and check evidence. As soon as `--ready-pr` returns, check the existing description against the spec, reviewed diff, saved results, and reviewer comment link. Edit it as needed within the authorized handoff. Preserve substantive details added by maintainers.
+
+- In **Summary**, explain what changed for users and why. Describe compatibility in ordinary prose. `propio-providers` rejects lines beginning with `BREAKING CHANGE` or `BREAKING-CHANGE`. For an intentional breaking-change footer in `propio-agent`, use `BREAKING CHANGE: description`.
+- For a user-facing change, use **How to use it** to show the documented workflow with the smallest set of steps or commands needed to try it.
+- In **Verification**, summarize what the checks exercised. Link to GitHub CI, the automated reviewer’s rationale, and a pushed delivery record when it is available to readers. If detailed evidence is local only, keep a concise result for each criterion in the description.
+
+Use one `Reviewed commit:` line with the full SHA from the saved factory review. Replace a stale SHA when reusing a PR. Before reporting the handoff, read the SHA in that line and the PR’s `headRefOid` from GitHub. Both must match the saved reviewed commit. A changed head requires fresh review.
+
+If the description already meets this guidance, skip the edit and link to the existing successful `CI / required` run for the PR at the reviewed SHA.
+
+Both Propio repositories run CI on PR edits. Before saving a changed description, note the existing run IDs and the time the edit begins. Wait for a new `pull_request` run for the PR at the reviewed SHA, created at or after that time, and confirm `CI / required` succeeds on that run. Link to the new run in the handoff message. If a description issue causes a failure, correct it and verify the run triggered by the correction. If a failure remains, report the failed run and what needs attention before completing the handoff.
+
 ## Authorize a draft PR
 
 ```sh
