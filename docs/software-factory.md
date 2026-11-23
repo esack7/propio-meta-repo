@@ -68,13 +68,15 @@ New PR titles default to `feat(<spec>): implement <slice words>`. Set the slice'
 
 ### Write the description for the PR reader
 
-The runner creates a description from the slice criteria and check evidence. Before handing back a ready PR, use the spec, the reviewed diff, and the saved results to make the description useful to someone seeing the change for the first time.
+The runner creates a description from the slice criteria and check evidence. As soon as `--ready-pr` returns, use the spec, reviewed diff, saved results, and reviewer comment link to edit the existing PR within the authorized handoff. Preserve substantive details added by maintainers.
 
-- In **Summary**, explain what changed for users and why. Call out any compatibility details that affect adoption.
+- In **Summary**, explain what changed for users and why. Describe compatibility in ordinary prose. `propio-providers` rejects lines beginning with `BREAKING CHANGE` or `BREAKING-CHANGE`. For an intentional breaking-change footer in `propio-agent`, use `BREAKING CHANGE: description`.
 - For a user-facing change, use **How to use it** to show the documented workflow with the smallest set of steps or commands needed to try it.
-- In **Verification**, summarize what the checks exercised and link to CI and the automated reviewer’s rationale. Keep full commands and logs in the delivery record and run artifacts.
+- In **Verification**, summarize what the checks exercised. Link to GitHub CI, the automated reviewer’s rationale, and a pushed delivery record when it is available to readers. If detailed evidence is local only, keep a concise result for each criterion in the description.
 
-Edit the description on the existing PR within the authorized handoff. Preserve substantive details already added by maintainers. Confirm the description is attached to the reviewed commit and check the result of any CI run triggered by the edit before reporting the handoff.
+Use one `Reviewed commit:` line with the full SHA from the saved factory review. Replace a stale SHA when reusing a PR. After the edit, read back the SHA in that line and the PR’s `headRefOid` from GitHub. Both must match the saved reviewed commit. A changed head requires fresh review.
+
+Both Propio repositories run CI on PR edits. Before saving the description, note the existing run IDs and the time the edit begins. Wait for a new `pull_request` run for the PR at the reviewed SHA, created at or after that time, and confirm `CI / required` succeeds on that run. Link to the new run in the handoff message. If a description issue causes a failure, correct it and verify the run triggered by the correction. If a failure remains, report the failed run and what needs attention before completing the handoff.
 
 ## Authorize a draft PR
 
